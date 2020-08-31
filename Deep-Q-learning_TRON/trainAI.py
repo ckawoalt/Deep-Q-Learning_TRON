@@ -9,6 +9,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
 import random
+import visdom
 
 import os
 
@@ -100,13 +101,15 @@ class Ai(Player):
 
 Transition = namedtuple('Transition', ('old_state', 'action', 'new_state', 'reward', 'terminal'))
 
-
 class ReplayMemory(object):
 
     def __init__(self, capacity):
         self.capacity = capacity
         self.memory = []
         self.position = 0
+
+    def reset(self):
+        self.memory.append(None)
 
     def push(self, *args):
         if len(self.memory) < self.capacity:
@@ -120,11 +123,44 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
+    def push_old(self,i):
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] =i
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def delete_old(self,batch_size):
+
+        del_mem=random.sample(self.memory, batch_size)
+
+        self.memory=list(set(self.memory) - set(del_mem))
+        self.position=len(self.memory)
+        return del_mem
+    def thanos(self):
+
+        self.memory = random.sample(self.memory, int(len(self.memory)*0.3))
+        self.position=len(self.memory)
+
+    def __len__(self):
+        return len(self.memory)
+
 
 def train(model):
     # Initialize neural network parameters and optimizer
     optimizer = optim.Adam(model.parameters())
     criterion = nn.MSELoss()
+
+    vis = visdom.Visdom()
+    vis.close(env="main")
+    loss_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='loss_tracker', legend=['loss'], showlegend=True))
+    du_plot = vis.line(Y=torch.Tensor(1).zero_(),
+                       opts=dict(title='duration_tracker', legend=['duration'], showlegend=True))
+    win_plot = vis.line(Y=torch.Tensor(1).zero_(),
+                        opts=dict(title='rating_tracker', legend=['win_rate'], showlegend=True))
+    test_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='test', legend=['test'], showlegend=True))
 
     # Initialize exploration rate
     epsilon = EPSILON_START
@@ -132,6 +168,7 @@ def train(model):
 
     # Initialize memory
     memory = ReplayMemory(MEM_CAPACITY)
+    old_memory=ReplayMemory(MEM_CAPACITY)
 
     # Initialize the game counter
     game_counter = 0
@@ -181,9 +218,9 @@ def train(model):
             old_state_p2 = torch.from_numpy(old_state_p2).float()
 
             # Run the game
-            window = Window(game, 40)
-            game.main_loop(window)
-            # game.main_loop()
+            # window = Window(game, 40)
+            # game.main_loop(window)
+            game.main_loop()
 
             # Analyze the game
             move_counter += len(game.history)
@@ -232,8 +269,8 @@ def train(model):
 
                 # Save the transition for each player
                 memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
-                if not (otherOpponent):
-                    memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
+              #  if not (otherOpponent):
+                memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
 
                 # Update old state for each player
                 old_state_p1 = new_state_p1
@@ -244,9 +281,17 @@ def train(model):
             if nouv_epsilon > ESPILON_END:
                 epsilon = nouv_epsilon
             if epsilon == 0 and game_counter % 100 == 0:
-                epsilon = espilon_temp
+                epsilon = epsilon_temp
+
 
         # Get a sample for training
+        n_transition = old_memory.sample(min(len(old_memory), max(model.batch_size - 64, model.batch_size)))
+
+        for i in transitions:
+            old_memory.push_old(i)
+
+        transitions += n_transition
+
         transitions = memory.sample(min(len(memory), model.batch_size))
         batch = Transition(*zip(*transitions))
         old_state_batch = torch.cat(batch.old_state)
@@ -259,9 +304,8 @@ def train(model):
         pred_q_values_next_batch = model(new_state_batch)
 
         # Compute targeted Q-value for action performed
-        target_q_values_batch = torch.cat(tuple(reward_batch[i] if batch[4]
-                                                else reward_batch[i] + model.gamma * torch.max(
-            pred_q_values_next_batch[i])
+        target_q_values_batch = torch.cat(tuple(reward_batch[i] if batch[4][i]
+                                                else reward_batch[i] + model.gamma * torch.max( pred_q_values_next_batch[i])
                                                 for i in range(len(reward_batch))))
 
         # zero the parameter gradients
@@ -269,8 +313,8 @@ def train(model):
 
         # Compute the loss
         target_q_values_batch = target_q_values_batch.detach()
-        loss = criterion(pred_q_values_batch, target_q_values_batch)
-
+        #loss = criterion(pred_q_values_batch, target_q_values_batch)
+        loss = F.smooth_l1_loss(pred_q_values_batch, target_q_values_batch)
         # Do backward pass
         loss.backward()
         optimizer.step()
@@ -288,6 +332,33 @@ def train(model):
             print("Loss =", loss_value)
             print("Epsilon =", epsilon)
             print("")
+
+            vis_loss = float(loss_value)
+            vis.line(X=torch.tensor([game_counter]),
+                     Y=torch.tensor([vis_loss]),
+                     win=loss_plot,
+                     update='append'
+                     )
+            vis.line(X=torch.tensor([game_counter]),
+                     Y=torch.tensor([float(move_counter) / float(DISPLAY_CYCLE)]),
+                     win=du_plot,
+                     update='append'
+                     )
+            # vis.line(X=torch.tensor([game_counter]),
+            #          Y=torch.tensor([p1_winrate]),
+            #          win=win_plot,
+            #          update='append'
+            #          )
+            #
+            # vis.line(X=torch.tensor([game_counter]),
+            #          Y=torch.tensor([under_minus_26]),
+            #          win=test_plot,
+            #          update='append'
+            #          )
+
+
+
+
             with open('ais/' + folderName + '/data.txt', 'a') as myfile:
                 myfile.write(str(game_counter) + ', ' + str(
                     float(move_counter) / float(DISPLAY_CYCLE)) + ', ' + loss_value + '\n')
