@@ -57,7 +57,7 @@ class Net(nn.Module):
 
         self.layer=self._make_layer(BasicBlock,64,self.layers,stride=2)
 
-        self.fc1 = nn.Linear(64 * 4 * 4, 512)
+        self.fc1 = nn.Linear(64 * 3 * 3, 512)
         self.fc2 = nn.Linear(512, 64)
         self.fc3 = nn.Linear(64,4)
 
