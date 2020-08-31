@@ -65,9 +65,9 @@ class Game:
             map_clone[pp.position[0], pp.position[1]] = pp.body()
 
         for id, pp in enumerate(self.pps):
-
+            try:
                 (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, id + 1, self.map())
-
+            except:
                 print("ERRRRRRRRRRRRRRRRRRRRROR")
                 if id == 0:
                     self.winner = 2
