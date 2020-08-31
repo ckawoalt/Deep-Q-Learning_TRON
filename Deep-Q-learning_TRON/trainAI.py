@@ -161,7 +161,8 @@ class ReplayMemory(object):
 
 def train(model):
     # Initialize neural network parameters and optimizer
-    optimizer = optim.Adam(model.parameters())
+    optimizer = optim.Adam(model.parameters(),lr=)
+    lr_sche = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
     criterion = nn.MSELoss()
     max_du = 0
     win_p1=0
@@ -390,6 +391,7 @@ def train(model):
         # Do backward pass
         loss.backward()
         optimizer.step()
+        lr_sche.step()
 
         if(old_memory.position>10000):
             old_memory.thanos()
