@@ -45,26 +45,41 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.batch_size = BATCH_SIZE
         self.gamma = GAMMA
-        self.conv1 = nn.Conv2d(1, 32, 6)
-        self.conv2 = nn.Conv2d(32, 64, 3)
+        self.conv1 = nn.Conv2d(1, 8, 6)
+        self.conv2 = nn.Conv2d(8, 32, 3,padding=1)
+        self.conv3 = nn.Conv2d(32, 64, 3,)
+
+
         self.fc1 = nn.Linear(64 * 5 * 5, 512)
-        self.fc2 = nn.Linear(512, 4)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256,64)
+        self.fc4 = nn.Linear(64, 4)
+
+        self.dropout=nn.Dropout(p=0.3)
 
         self.batch_norm = nn.BatchNorm2d(1)
         torch.nn.init.xavier_uniform_(self.fc1.weight)
         torch.nn.init.xavier_uniform_(self.fc2.weight)
+        torch.nn.init.xavier_uniform_(self.fc3.weight)
+        torch.nn.init.xavier_uniform_(self.fc4.weight)
 
     def forward(self, x):
         x= x.cuda()
+
         x=self.batch_norm(x)
 
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
+        x = self.dropout(F.relu(self.conv1(x)))
+        x = self.dropout(F.relu(self.conv2(x)))
+        x = self.dropout(F.relu(self.conv3(x)))
+        x = self.dropout(F.relu(self.conv4(x)))
 
         x = x.view(-1, 64 * 5 * 5)
 
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
+        x = self.dropout(F.relu(self.fc1(x)))
+        x = self.dropout(F.relu(self.fc2(x)))
+        x = self.dropout(F.relu(self.fc3(x)))
+        x = self.dropout(self.fc4(x))
+
         return x
 
 
@@ -161,8 +176,8 @@ class ReplayMemory(object):
 
 def train(model):
     # Initialize neural network parameters and optimizer
-    optimizer = optim.Adam(model.parameters(),lr=)
-    lr_sche = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+    optimizer = optim.Adam(model.parameters())
+    #lr_sche = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
     criterion = nn.MSELoss()
     max_du = 0
     win_p1=0
@@ -216,7 +231,7 @@ def train(model):
         while cycle_step < GAME_CYCLE:
             changeAi += 1
 
-            if (game_counter < 200):
+            if (game_counter < 50000):
                 changeAi = 0
 
             if (changeAi > minnimax_match):
@@ -391,7 +406,7 @@ def train(model):
         # Do backward pass
         loss.backward()
         optimizer.step()
-        lr_sche.step()
+        #lr_sche.step()
 
         if(old_memory.position>10000):
             old_memory.thanos()
