@@ -2,6 +2,7 @@ from tron.player import Player, Direction
 from tron.game import Tile, Game, PositionPlayer
 from tron.window import Window
 from collections import namedtuple
+from tron.minimax import MinimaxPlayer
 
 import torch
 import torch.nn as nn
@@ -20,6 +21,7 @@ folderName = 'survivor'
 BATCH_SIZE = 128
 GAMMA = 0.9  # Discount factor
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # Exploration parameters
 EPSILON_START = 1
 ESPILON_END = 0.05
@@ -48,10 +50,19 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(64 * 5 * 5, 512)
         self.fc2 = nn.Linear(512, 4)
 
+        self.batch_norm = nn.BatchNorm2d(1)
+        torch.nn.init.xavier_uniform_(self.fc1.weight)
+        torch.nn.init.xavier_uniform_(self.fc2.weight)
+
     def forward(self, x):
+        x= x.cuda()
+        x=self.batch_norm(x)
+
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
+
         x = x.view(-1, 64 * 5 * 5)
+
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x
@@ -61,7 +72,7 @@ class Ai(Player):
 
     def __init__(self, epsilon=0):
         super(Ai, self).__init__()
-        self.net = Net()
+        self.net = Net().to(device)
         self.epsilon = epsilon
         # Load network weights if they have been initialized already
         if os.path.isfile('ais/' + folderName + '/ai.bak'):
@@ -81,7 +92,7 @@ class Ai(Player):
         output = self.net(input)
 
         _, predicted = torch.max(output.data, 1)
-        predicted = predicted.numpy()
+        predicted = predicted.cpu().numpy()
         next_action = predicted[0] + 1
 
         if random.random() <= self.epsilon:
@@ -152,6 +163,20 @@ def train(model):
     # Initialize neural network parameters and optimizer
     optimizer = optim.Adam(model.parameters())
     criterion = nn.MSELoss()
+    max_du = 0
+    win_p1=0
+    win_p2=0
+    changeAi = 0
+    vs_min_p1_win = 0
+    minimax_game = 0
+    minnimax_match = 1000
+    minimam_match = 1000
+    Aiset = True
+    learnAi = True
+    ai = 'basic'
+    vs_min_p1_win = 0
+    minimax_game = 0
+    rate = 0
 
     vis = visdom.Visdom()
     vis.close(env="main")
@@ -173,7 +198,7 @@ def train(model):
     # Initialize the game counter
     game_counter = 0
     move_counter = 0
-
+    player_2 = Ai(epsilon)
     # Start training
     while True:
 
@@ -183,11 +208,41 @@ def train(model):
         p2_victories = 0
         null_games = 0
         player_1 = Ai(epsilon)
-        player_2 = Ai(epsilon)
+        #player_2 = Ai(epsilon)
         otherOpponent = True
 
         # Play a cycle of games
         while cycle_step < GAME_CYCLE:
+            changeAi += 1
+
+            if (game_counter < 200):
+                changeAi = 0
+
+            if (changeAi > minnimax_match):
+
+                if (Aiset):
+                    player_2 = Ai(epsilon)
+                    player_2.epsilon = epsilon
+                    player_2 = MinimaxPlayer(2, 'VORNOI')
+
+                    Aiset = False
+                    learnAi = False
+
+                    ai = 'minimax'
+                    minnimax_match = (10000 * rate) + minimam_match
+
+                else:
+                    rate = vs_min_p1_win / minimax_game
+                    minnimax_match = 10000 - minnimax_match
+
+                    vs_min_p1_win = 0
+                    minimax_game = 0
+                    learnAi = True
+                    Aiset = True
+                    player_2 = Ai(epsilon)
+                    player_2.epsilon = epsilon
+                    ai = 'basic Ai'
+                changeAi = 0
 
             # Increment the counters
             game_counter += 1
@@ -204,7 +259,10 @@ def train(model):
 
             # Initialize the game
             player_1.epsilon = epsilon
-            player_2.epsilon = epsilon
+            if (learnAi):
+                player_2 = Ai(epsilon)
+                player_2.epsilon = epsilon
+            #player_2.epsilon = epsilon
             game = Game(MAP_WIDTH, MAP_HEIGHT, [
                 PositionPlayer(1, player_1, [x1, y1]),
                 PositionPlayer(2, player_2, [x2, y2]), ])
@@ -258,10 +316,14 @@ def train(model):
                         reward_p1 = 100
                         reward_p2 = -25
                         p1_victories += 1
+                        if not (Aiset):
+                            vs_min_p1_win+=1
                     else:
                         reward_p1 = -25
                         reward_p2 = 100
                         p2_victories += 1
+                    if not (Aiset):
+                        minimax_game += 1
                     terminal = True
 
                 reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
@@ -284,6 +346,7 @@ def train(model):
                 epsilon = epsilon_temp
 
 
+        transitions = memory.delete_old(min(len(memory), model.batch_size))
         # Get a sample for training
         n_transition = old_memory.sample(min(len(old_memory), max(model.batch_size - 64, model.batch_size)))
 
@@ -292,32 +355,49 @@ def train(model):
 
         transitions += n_transition
 
-        transitions = memory.sample(min(len(memory), model.batch_size))
+       # transitions = memory.sample(min(len(memory), model.batch_size))
+
         batch = Transition(*zip(*transitions))
+
         old_state_batch = torch.cat(batch.old_state)
         action_batch = torch.cat(batch.action).long()
         new_state_batch = torch.cat(batch.new_state)
-        reward_batch = torch.cat(batch.reward)
+        reward_batch = torch.cat(batch.reward).to(device)
 
         # Compute predicted Q-values for each action
-        pred_q_values_batch = torch.sum(model(old_state_batch).gather(1, action_batch), dim=1)
-        pred_q_values_next_batch = model(new_state_batch)
+        pred_q_values_batch = torch.sum(model(old_state_batch).gather(1, action_batch.to(device)), dim=1).to(device)
+        pred_q_values_next_batch = model(new_state_batch).to(device)
 
         # Compute targeted Q-value for action performed
         target_q_values_batch = torch.cat(tuple(reward_batch[i] if batch[4][i]
                                                 else reward_batch[i] + model.gamma * torch.max( pred_q_values_next_batch[i])
                                                 for i in range(len(reward_batch))))
 
+
+        under_minus_26 = 0
+        if(torch.min(pred_q_values_next_batch)<(-25)):
+            if(game_counter % 100 == 0):
+                under_minus_26 = torch.sum(pred_q_values_next_batch < -25).squeeze()
+        win_p1 += p1_victories
+        win_p2 += p2_victories
         # zero the parameter gradients
         model.zero_grad()
 
         # Compute the loss
-        target_q_values_batch = target_q_values_batch.detach()
+        target_q_values_batch = target_q_values_batch.detach().to(device)
         #loss = criterion(pred_q_values_batch, target_q_values_batch)
         loss = F.smooth_l1_loss(pred_q_values_batch, target_q_values_batch)
         # Do backward pass
         loss.backward()
         optimizer.step()
+
+        if(old_memory.position>10000):
+            old_memory.thanos()
+        if(memory.position>10000):
+            memory.thanos()
+        if (game_counter % DISPLAY_CYCLE) == 0:
+            if (max_du < (float(move_counter) / float(DISPLAY_CYCLE))):
+                max_du = float(move_counter) / float(DISPLAY_CYCLE)
 
         # Update bak
         torch.save(model.state_dict(), 'ais/' + folderName + '/ai.bak')
@@ -332,6 +412,13 @@ def train(model):
             print("Loss =", loss_value)
             print("Epsilon =", epsilon)
             print("")
+            print("Max duration :", max_du)
+            print("score p1 vs p2 =", win_p1, ":", win_p2)
+            print("ai state=", ai)
+            p1_winrate = p1_victories / (GAME_CYCLE)
+            print("mini", minnimax_match)
+            print("old", old_memory.position, "posi", len(old_memory.memory), "mem size")
+            print("new", memory.position, "posi", len(memory.memory), "mem size")
 
             vis_loss = float(loss_value)
             vis.line(X=torch.tensor([game_counter]),
@@ -344,17 +431,17 @@ def train(model):
                      win=du_plot,
                      update='append'
                      )
-            # vis.line(X=torch.tensor([game_counter]),
-            #          Y=torch.tensor([p1_winrate]),
-            #          win=win_plot,
-            #          update='append'
-            #          )
-            #
-            # vis.line(X=torch.tensor([game_counter]),
-            #          Y=torch.tensor([under_minus_26]),
-            #          win=test_plot,
-            #          update='append'
-            #          )
+            vis.line(X=torch.tensor([game_counter]),
+                     Y=torch.tensor([p1_winrate]),
+                     win=win_plot,
+                     update='append'
+                     )
+
+            vis.line(X=torch.tensor([game_counter]),
+                     Y=torch.tensor([under_minus_26]),
+                     win=test_plot,
+                     update='append'
+                     )
 
 
 
@@ -366,7 +453,7 @@ def train(model):
 
 
 def main():
-    model = Net()
+    model = Net().to(device)
     if os.path.isfile('ais/' + folderName + '/ai.bak'):
         model.load_state_dict(torch.load('ais/' + folderName + '/ai.bak'))
     train(model)
