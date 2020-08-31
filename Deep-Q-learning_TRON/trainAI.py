@@ -3,6 +3,8 @@ from tron.game import Tile, Game, PositionPlayer
 from tron.window import Window
 from collections import namedtuple
 from tron.minimax import MinimaxPlayer
+from tron import resnet
+from torch.utils.tensorboard import SummaryWriter
 
 import torch
 import torch.nn as nn
@@ -26,17 +28,19 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 EPSILON_START = 1
 ESPILON_END = 0.05
 DECAY_RATE = 0.999
-
+BasicBlock=resnet.BasicBlock
+conv1x1=resnet.conv1x1
 # Map parameters
 MAP_WIDTH = 10
 MAP_HEIGHT = 10
 
 # Memory parameters
 MEM_CAPACITY = 10000
-
+writer=SummaryWriter()
 # Cycle parameters
-GAME_CYCLE = 20
+GAME_CYCLE = 10
 DISPLAY_CYCLE = GAME_CYCLE
+
 
 
 class Net(nn.Module):
@@ -45,15 +49,19 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.batch_size = BATCH_SIZE
         self.gamma = GAMMA
-        self.conv1 = nn.Conv2d(1, 8, 6)
-        self.conv2 = nn.Conv2d(8, 32, 3,padding=1)
-        self.conv3 = nn.Conv2d(32, 64, 3,)
+        self.inplanes =1
+        self.layers=3
+        # self.conv1 = nn.Conv2d(1, 8, 5,padding=2)
+        # self.conv2 = nn.Conv2d(8, 32, 3,padding=1)
+        # self.conv3 = nn.Conv2d(32, 64, 3,padding=1)
+
+        self.layer=self._make_layer(BasicBlock,64,self.layers,stride=2)
+
+        self.fc1 = nn.Linear(64 * 4 * 4, 512)
+        self.fc2 = nn.Linear(512, 64)
+        self.fc3 = nn.Linear(64,4)
 
 
-        self.fc1 = nn.Linear(64 * 5 * 5, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256,64)
-        self.fc4 = nn.Linear(64, 4)
 
         self.dropout=nn.Dropout(p=0.3)
 
@@ -61,27 +69,41 @@ class Net(nn.Module):
         torch.nn.init.xavier_uniform_(self.fc1.weight)
         torch.nn.init.xavier_uniform_(self.fc2.weight)
         torch.nn.init.xavier_uniform_(self.fc3.weight)
-        torch.nn.init.xavier_uniform_(self.fc4.weight)
+        #torch.nn.init.xavier_uniform_(self.fc4.weight)
 
     def forward(self, x):
         x= x.cuda()
 
         x=self.batch_norm(x)
 
-        x = self.dropout(F.relu(self.conv1(x)))
-        x = self.dropout(F.relu(self.conv2(x)))
-        x = self.dropout(F.relu(self.conv3(x)))
-        x = self.dropout(F.relu(self.conv4(x)))
+        x =self.layer(x)
 
-        x = x.view(-1, 64 * 5 * 5)
+
+        x = x.view(-1, 64 *  3* 3)
 
         x = self.dropout(F.relu(self.fc1(x)))
         x = self.dropout(F.relu(self.fc2(x)))
-        x = self.dropout(F.relu(self.fc3(x)))
-        x = self.dropout(self.fc4(x))
+        x = F.relu(self.fc3(x))
 
         return x
+    def _make_layer(self, block, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                conv1x1(self.inplanes, planes * block.expansion, stride),
+                nn.BatchNorm2d(planes * block.expansion),
+            )
 
+        layers = []
+
+        layers.append(block(self.inplanes, planes, stride, downsample))
+
+        self.inplanes = planes * block.expansion
+
+        for _ in range(1, blocks):
+            layers.append(block(self.inplanes, planes))
+
+        return nn.Sequential(*layers)
 
 class Ai(Player):
 
@@ -177,7 +199,7 @@ class ReplayMemory(object):
 def train(model):
     # Initialize neural network parameters and optimizer
     optimizer = optim.Adam(model.parameters())
-    #lr_sche = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+    lr_sche = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
     criterion = nn.MSELoss()
     max_du = 0
     win_p1=0
@@ -406,7 +428,7 @@ def train(model):
         # Do backward pass
         loss.backward()
         optimizer.step()
-        #lr_sche.step()
+        lr_sche.step()
 
         if(old_memory.position>10000):
             old_memory.thanos()
@@ -459,8 +481,10 @@ def train(model):
                      win=test_plot,
                      update='append'
                      )
-
-
+            writer.add_scalar('loss_tracker', vis_loss, game_counter)
+            writer.add_scalar('duration_tracker', (float(move_counter) / float(DISPLAY_CYCLE)), game_counter)
+            writer.add_scalar('ration_tracker', p1_winrate, game_counter)
+            writer.add_scalar('test', under_minus_26, game_counter)
 
 
             with open('ais/' + folderName + '/data.txt', 'a') as myfile:
