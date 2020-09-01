@@ -50,16 +50,19 @@ class Net(nn.Module):
         self.batch_size = BATCH_SIZE
         self.gamma = GAMMA
         self.inplanes =1
-        self.layers=3
+        self.layers=1
         # self.conv1 = nn.Conv2d(1, 8, 5,padding=2)
         # self.conv2 = nn.Conv2d(8, 32, 3,padding=1)
         # self.conv3 = nn.Conv2d(32, 64, 3,padding=1)
 
-        self.layer=self._make_layer(BasicBlock,64,self.layers,stride=2)
+        self.layer1=self._make_layer(BasicBlock,8,self.layers)
+        self.layer2 = self._make_layer(BasicBlock, 32, self.layers)
+        self.layer3 = self._make_layer(BasicBlock, 64, self.layers,stride=2)
 
-        self.fc1 = nn.Linear(64 * 3 * 3, 512)
-        self.fc2 = nn.Linear(512, 64)
+        self.fc1 = nn.Linear(64 * 3 * 3, 256)
+        self.fc2 = nn.Linear(256, 64)
         self.fc3 = nn.Linear(64,4)
+        self.AvgPool = nn.AvgPool2d(kernel_size=3, stride=1)
 
 
 
@@ -74,16 +77,21 @@ class Net(nn.Module):
     def forward(self, x):
         x= x.cuda()
 
-        x=self.batch_norm(x)
+        #x=self.batch_norm(x)
 
-        x =self.layer(x)
+        x =self.layer1(x)
+        x =self.layer2(x)
+        x=  self.AvgPool(x)
+        x = self.layer3(x)
+        x = self.AvgPool(x)
+
 
 
         x = x.view(-1, 64 *  3* 3)
 
         x = self.dropout(F.relu(self.fc1(x)))
         x = self.dropout(F.relu(self.fc2(x)))
-        x = F.relu(self.fc3(x))
+        x = self.fc3(x)
 
         return x
     def _make_layer(self, block, planes, blocks, stride=1):
