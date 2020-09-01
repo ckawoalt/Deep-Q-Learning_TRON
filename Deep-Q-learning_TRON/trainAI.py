@@ -38,7 +38,7 @@ MAP_HEIGHT = 10
 MEM_CAPACITY = 10000
 writer=SummaryWriter()
 # Cycle parameters
-GAME_CYCLE = 10
+GAME_CYCLE = 20
 DISPLAY_CYCLE = GAME_CYCLE
 
 
@@ -55,11 +55,14 @@ class Net(nn.Module):
         # self.conv2 = nn.Conv2d(8, 32, 3,padding=1)
         # self.conv3 = nn.Conv2d(32, 64, 3,padding=1)
 
-        self.layer1=self._make_layer(BasicBlock,8,self.layers)
-        self.layer2 = self._make_layer(BasicBlock, 32, self.layers)
-        self.layer3 = self._make_layer(BasicBlock, 64, self.layers,stride=2)
+        # self.layer1=self._make_layer(BasicBlock,8,self.layers,stride=2)
+        # self.layer2 = self._make_layer(BasicBlock, 64, self.layers)
+       # self.layer3 = self._make_layer(BasicBlock, 128, self.layers,stride=2)
+        self.conv1=nn.Conv2d(1, 8, 7,padding=3,stride=2)
+        self.conv2 = nn.Conv2d(8, 32, 5, padding=2)
+        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
 
-        self.fc1 = nn.Linear(64 * 3 * 3, 256)
+        self.fc1 = nn.Linear(128 * 2 * 2, 256)
         self.fc2 = nn.Linear(256, 64)
         self.fc3 = nn.Linear(64,4)
         self.AvgPool = nn.AvgPool2d(kernel_size=3, stride=1)
@@ -77,17 +80,21 @@ class Net(nn.Module):
     def forward(self, x):
         x= x.cuda()
 
-        #x=self.batch_norm(x)
+        x=self.batch_norm(x)
 
-        x =self.layer1(x)
-        x =self.layer2(x)
-        x=  self.AvgPool(x)
-        x = self.layer3(x)
+        # x = self.layer1(x)
+        # x = self.layer2(x)
+        # x = self.AvgPool(x)
+        #x = self.layer3(x)
+        #x = self.AvgPool(x)
+
+
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
         x = self.AvgPool(x)
+        x = F.relu(self.conv3(x))
 
-
-
-        x = x.view(-1, 64 *  3* 3)
+        x = x.view(-1, 128 *  2* 2)
 
         x = self.dropout(F.relu(self.fc1(x)))
         x = self.dropout(F.relu(self.fc2(x)))
@@ -96,6 +103,7 @@ class Net(nn.Module):
         return x
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
+
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
                 conv1x1(self.inplanes, planes * block.expansion, stride),
@@ -207,7 +215,7 @@ class ReplayMemory(object):
 def train(model):
     # Initialize neural network parameters and optimizer
     optimizer = optim.Adam(model.parameters())
-    lr_sche = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+    lr_sche = optim.lr_scheduler.ReduceLROnPlateau(optimizer,'min',patience=1,factor=0.9,verbose=True)
     criterion = nn.MSELoss()
     max_du = 0
     win_p1=0
@@ -394,7 +402,7 @@ def train(model):
 
         transitions = memory.delete_old(min(len(memory), model.batch_size))
         # Get a sample for training
-        n_transition = old_memory.sample(min(len(old_memory), max(model.batch_size - 64, model.batch_size)))
+        n_transition = old_memory.sample(min(len(old_memory), max(len(transitions)-BATCH_SIZE, BATCH_SIZE)))
 
         for i in transitions:
             old_memory.push_old(i)
@@ -436,7 +444,7 @@ def train(model):
         # Do backward pass
         loss.backward()
         optimizer.step()
-        lr_sche.step()
+        lr_sche.step(loss)
 
         if(old_memory.position>10000):
             old_memory.thanos()
