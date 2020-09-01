@@ -35,7 +35,7 @@ MAP_WIDTH = 10
 MAP_HEIGHT = 10
 
 # Memory parameters
-MEM_CAPACITY = 10000
+MEM_CAPACITY = 15000
 writer=SummaryWriter()
 # Cycle parameters
 GAME_CYCLE = 20
@@ -57,48 +57,60 @@ class Net(nn.Module):
 
         # self.layer1=self._make_layer(BasicBlock,8,self.layers,stride=2)
         # self.layer2 = self._make_layer(BasicBlock, 64, self.layers)
-       # self.layer3 = self._make_layer(BasicBlock, 128, self.layers,stride=2)
+        # self.layer3 = self._make_layer(BasicBlock, 128, self.layers)
         self.conv1=nn.Conv2d(1, 8, 7,padding=3,stride=2)
-        self.conv2 = nn.Conv2d(8, 32, 5, padding=2)
-        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
+        self.conv2 = nn.Conv2d(8, 32, 5, padding=2,stride=2)
+        self.conv3 = nn.Conv2d(32, 64, 5, padding=2)
+        self.conv4 = nn.Conv2d(64, 256, 3, padding=1)
 
-        self.fc1 = nn.Linear(128 * 2 * 2, 256)
-        self.fc2 = nn.Linear(256, 64)
-        self.fc3 = nn.Linear(64,4)
-        self.AvgPool = nn.AvgPool2d(kernel_size=3, stride=1)
-
+        # self.conv1=nn.Conv2d(1, 32, 6)
+        # self.conv2 = nn.Conv2d(32, 64, 3)
 
 
-        self.dropout=nn.Dropout(p=0.3)
+        self.fc1 = nn.Linear(256 * 1 * 1, 256)
+        # self.fc2 = nn.Linear(256, 512)
+        # self.fc3 = nn.Linear(512, 256)
+        self.fc4 = nn.Linear(256, 64)
+        self.fc5 = nn.Linear(64, 4)
+
+        self.maxPool = nn.MaxPool2d(kernel_size=3, stride=1)
+
+
+
+        self.dropout=nn.Dropout(p=0.2)
 
         self.batch_norm = nn.BatchNorm2d(1)
         torch.nn.init.xavier_uniform_(self.fc1.weight)
-        torch.nn.init.xavier_uniform_(self.fc2.weight)
-        torch.nn.init.xavier_uniform_(self.fc3.weight)
-        #torch.nn.init.xavier_uniform_(self.fc4.weight)
+        # torch.nn.init.xavier_uniform_(self.fc2.weight)
+        # torch.nn.init.xavier_uniform_(self.fc3.weight)
+        torch.nn.init.xavier_uniform_(self.fc4.weight)
+        torch.nn.init.xavier_uniform_(self.fc5.weight)
 
     def forward(self, x):
         x= x.cuda()
 
         x=self.batch_norm(x)
-
+        #
         # x = self.layer1(x)
         # x = self.layer2(x)
         # x = self.AvgPool(x)
-        #x = self.layer3(x)
-        #x = self.AvgPool(x)
+        # x = self.layer3(x)
+        # x = self.AvgPool(x)
 
 
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
-        x = self.AvgPool(x)
         x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        x = self.maxPool(x)
 
-        x = x.view(-1, 128 *  2* 2)
+        x = x.view(-1, 256* 1 *1)
 
         x = self.dropout(F.relu(self.fc1(x)))
-        x = self.dropout(F.relu(self.fc2(x)))
-        x = self.fc3(x)
+        # x = self.dropout(F.relu(self.fc2(x)))
+        # x = self.dropout(F.relu(self.fc3(x)))
+        x = self.dropout(F.relu(self.fc4(x)))
+        x = self.fc5(x)
 
         return x
     def _make_layer(self, block, planes, blocks, stride=1):
@@ -205,7 +217,7 @@ class ReplayMemory(object):
         return del_mem
     def thanos(self):
 
-        self.memory = random.sample(self.memory, int(len(self.memory)*0.3))
+        self.memory=random.sample(self.memory, int(len(self.memory)*0.2))
         self.position=len(self.memory)
 
     def __len__(self):
@@ -215,7 +227,7 @@ class ReplayMemory(object):
 def train(model):
     # Initialize neural network parameters and optimizer
     optimizer = optim.Adam(model.parameters())
-    lr_sche = optim.lr_scheduler.ReduceLROnPlateau(optimizer,'min',patience=1,factor=0.9,verbose=True)
+    #lr_sche = optim.lr_scheduler.ReduceLROnPlateau(optimizer,'min',patience=1,factor=0.9,verbose=True)
     criterion = nn.MSELoss()
     max_du = 0
     win_p1=0
@@ -444,11 +456,11 @@ def train(model):
         # Do backward pass
         loss.backward()
         optimizer.step()
-        lr_sche.step(loss)
+       # lr_sche.step(loss)
 
-        if(old_memory.position>10000):
+        if(len(old_memory.memory)>10000):
             old_memory.thanos()
-        if(memory.position>10000):
+        if(len(memory.memory)>10000):
             memory.thanos()
         if (game_counter % DISPLAY_CYCLE) == 0:
             if (max_du < (float(move_counter) / float(DISPLAY_CYCLE))):
