@@ -55,13 +55,13 @@ class Net(nn.Module):
         # self.conv2 = nn.Conv2d(8, 32, 3,padding=1)
         # self.conv3 = nn.Conv2d(32, 64, 3,padding=1)
 
-        # self.layer1=self._make_layer(BasicBlock,8,self.layers,stride=2)
-        # self.layer2 = self._make_layer(BasicBlock, 64, self.layers)
-        # self.layer3 = self._make_layer(BasicBlock, 128, self.layers)
-        self.conv1=nn.Conv2d(1, 8, 7,padding=3,stride=2)
-        self.conv2 = nn.Conv2d(8, 32, 5, padding=2,stride=2)
-        self.conv3 = nn.Conv2d(32, 64, 5, padding=2)
-        self.conv4 = nn.Conv2d(64, 256, 3, padding=1)
+        self.layer1=self._make_layer(BasicBlock,8,self.layers,stride=2)
+        self.layer2 = self._make_layer(BasicBlock, 64, self.layers)
+        self.layer3 = self._make_layer(BasicBlock, 128, self.layers)
+        # self.conv1=nn.Conv2d(1, 8, 7,padding=3,stride=2)
+        # self.conv2 = nn.Conv2d(8, 32, 5, padding=2,stride=2)
+        # self.conv3 = nn.Conv2d(32, 64, 5, padding=2)
+        # self.conv4 = nn.Conv2d(64, 256, 3, padding=1)
 
         # self.conv1=nn.Conv2d(1, 32, 6)
         # self.conv2 = nn.Conv2d(32, 64, 3)
@@ -90,19 +90,19 @@ class Net(nn.Module):
         x= x.cuda()
 
         x=self.batch_norm(x)
-        #
-        # x = self.layer1(x)
-        # x = self.layer2(x)
-        # x = self.AvgPool(x)
-        # x = self.layer3(x)
-        # x = self.AvgPool(x)
 
-
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
-        x = F.relu(self.conv4(x))
+        x = self.layer1(x)
+        x = self.layer2(x)
         x = self.maxPool(x)
+        x = self.layer3(x)
+        x = self.maxPool(x)
+
+
+        # x = F.relu(self.conv1(x))
+        # x = F.relu(self.conv2(x))
+        # x = F.relu(self.conv3(x))
+        # x = F.relu(self.conv4(x))
+        # x = self.maxPool(x)
 
         x = x.view(-1, 256* 1 *1)
 
@@ -260,6 +260,8 @@ def train(model):
     # Initialize memory
     memory = ReplayMemory(MEM_CAPACITY)
     old_memory=ReplayMemory(MEM_CAPACITY)
+    blowup1 = ReplayMemory(MEM_CAPACITY)
+    blowup2 = ReplayMemory(MEM_CAPACITY)
 
     # Initialize the game counter
     game_counter = 0
@@ -281,7 +283,7 @@ def train(model):
         while cycle_step < GAME_CYCLE:
             changeAi += 1
 
-            if (game_counter < 50000):
+            if (game_counter < 200000):
                 changeAi = 0
 
             if (changeAi > minnimax_match):
@@ -378,16 +380,43 @@ def train(model):
                         null_games += 1
                         reward_p1 = 0
                         reward_p2 = 0
+
+
+                        sample1 = blowup1.delete_old(len(blowup1.memory))
+                        sample2 = blowup1.delete_old(len(blowup1.memory))
+
+                        for i in sample1:
+                            memory.push_old(i)
+
+                        for i in sample2:
+                            memory.push_old(i)
+
                     elif game.winner == 1:
                         reward_p1 = 100
                         reward_p2 = -25
                         p1_victories += 1
+
+                        sample = blowup1.delete_old(len(blowup1.memory))
+                        for i in sample:
+                            list1 = list(i)
+                            list1[3] += 15
+                            i = tuple(list1)
+                            memory.push_old(i)
                         if not (Aiset):
                             vs_min_p1_win+=1
                     else:
                         reward_p1 = -25
                         reward_p2 = 100
                         p2_victories += 1
+                        sample = blowup2.delete_old(len(blowup2.memory))
+
+                        for i in sample:
+                            list1 = list(i)
+                            list1[3] += 15
+                            i = tuple(list1)
+                            memory.push_old(i)
+
+
                     if not (Aiset):
                         minimax_game += 1
                     terminal = True
@@ -396,13 +425,16 @@ def train(model):
                 reward_p2 = torch.from_numpy(np.array([reward_p2], dtype=np.float32)).unsqueeze(0)
 
                 # Save the transition for each player
-                memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
-              #  if not (otherOpponent):
-                memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
+              #   memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
+              # #  if not (otherOpponent):
+              #   memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
 
+                blowup1.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
+                blowup2.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
                 # Update old state for each player
                 old_state_p1 = new_state_p1
                 old_state_p2 = new_state_p2
+
 
             # Update exploration rate
             nouv_epsilon = epsilon * DECAY_RATE
@@ -424,7 +456,6 @@ def train(model):
        # transitions = memory.sample(min(len(memory), model.batch_size))
 
         batch = Transition(*zip(*transitions))
-
         old_state_batch = torch.cat(batch.old_state)
         action_batch = torch.cat(batch.action).long()
         new_state_batch = torch.cat(batch.new_state)
