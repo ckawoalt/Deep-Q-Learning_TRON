@@ -3,6 +3,7 @@ from tron.game import Tile, Game, PositionPlayer
 from tron.window import Window
 from collections import namedtuple
 from torch.utils.tensorboard import SummaryWriter
+from tron.minimax import MinimaxPlayer
 
 import torch
 import torch.nn as nn
@@ -25,7 +26,7 @@ GAMMA = 0.9 # Discount factor
 
 # Exploration parameters
 EPSILON_START = 1
-ESPILON_END = 0.05
+ESPILON_END = 0.02
 DECAY_RATE = 0.999
 
 # Map parameters
@@ -48,23 +49,23 @@ class Net(nn.Module):
 		self.gamma = GAMMA
 		# self.conv1=nn.Conv2d(1, 8, 7,padding=3)
 		# self.conv2 = nn.Conv2d(8, 32, 5, padding=2)
-		# self.conv3 = nn.Conv2d(32, 64, 5,padding=2,stride=2)
-		#self.conv4 = nn.Conv2d(64, 256, 3, padding=1)
+		# self.conv3 = nn.Conv2d(32, 128, 5,padding=2,stride=2)
+		# self.conv4 = nn.Conv2d(128, 256, 3, padding=1)
 
 		self.conv1=nn.Conv2d(1, 32, 6)
 		self.conv2 = nn.Conv2d(32, 64, 3)
 
 
 
-		# self.maxPool = nn.MaxPool2d(kernel_size=2, stride=2)
-		# self.dropout=nn.Dropout(p=0.2)
-		# self.batchnorm=nn.BatchNorm2d(1)
+		self.maxPool = nn.MaxPool2d(kernel_size=2, stride=2)
+		self.dropout=nn.Dropout(p=0.2)
+		#self.batchnorm=nn.BatchNorm2d(1)
 
 		self.relu=nn.ReLU()
-		# self.fc0 = nn.Linear(64 * 3 * 3, 1024)
+		# self.fc1 = nn.Linear(128 * 1 * 1, 256)
 		# self.fc1 = nn.Linear(512, 1024)
-		# self.fc2 = nn.Linear(1024, 512)
-		# self.fc3 = nn.Linear(1024, 256)
+		# self.fc2 = nn.Linear(256, 512)
+		# self.fc3 = nn.Linear(512, 256)
 		# self.fc4 = nn.Linear(256, 64)
 		# self.fc5 = nn.Linear(64, 4)
 
@@ -81,22 +82,29 @@ class Net(nn.Module):
 	def forward(self, x):
 
 		x=x.cuda()
+
 		# id = x
 		# x=self.batchnorm(x)
-		x = self.relu(self.conv1(x))
-		x = self.relu(self.conv2(x))
+		# x = self.relu(self.conv1(x))
+		# x = self.conv2(x)
 		# x=x+id
+		# self.relu(x)
 		# x = self.relu(self.conv3(x))
-		# #x = self.relu(self.conv4(x))
 		# x = self.maxPool(x)
 
-		x = x.view(-1, 64*5*5)
+		# x = x.view(-1, 128*1*1)
+
+		x = self.relu(self.conv1(x))
+		x = self.relu(self.conv2(x))
+		x = x.view(-1, 64 * 5 * 5)
 
 		# x = self.dropout(self.relu(self.fc0(x)))
+		# x = self.dropout(self.relu(self.fc1(x)))
+		# x = self.dropout(self.relu(self.fc2(x)))
 		# x = self.dropout(self.relu(self.fc3(x)))
 		# x = self.dropout(self.relu(self.fc4(x)))
 		# x = self.fc5(x)
-		#
+
 		x=self.relu(self.fc1(x))
 		x = self.fc2(x)
 
@@ -217,6 +225,7 @@ def train(model):
 
 	# Initialize memory
 	memory = ReplayMemory(MEM_CAPACITY)
+	mini_memory= ReplayMemory(MEM_CAPACITY)
 	blowup1 = ReplayMemory(MEM_CAPACITY)
 	blowup2 = ReplayMemory(MEM_CAPACITY)
 
@@ -224,7 +233,19 @@ def train(model):
 	game_counter = 0
 	move_counter = 0
 
+	win_p1 = 0
+	win_p2 = 0
+	changeAi = 0
+	vs_min_p1_win = 0
+	minimax_game = 0
+	minnimax_match = 1000
+	minimam_match = 1000
+	Aiset = True
+	otherOpponent = True
+	ai='basic'
+	rate=0
 	# Start training
+	player_2 = Ai(epsilon)
 	while True:
 
 		# Initialize the game cycle parameters
@@ -233,11 +254,44 @@ def train(model):
 		p2_victories = 0
 		null_games = 0
 		player_1 = Ai(epsilon)
-		player_2 = Ai(epsilon)
-		otherOpponent = True
+		if(Aiset):
+			player_2 = Ai(epsilon)
+
+
 
 		# Play a cycle of games
 		while cycle_step < GAME_CYCLE:
+			changeAi += 1
+
+			if (game_counter < 3000):
+				changeAi = 0
+
+			if (changeAi > minnimax_match):
+
+				if (Aiset):
+					#memory.reset()
+					player_2 = Ai(epsilon)
+					player_2.epsilon = epsilon
+					player_2 = MinimaxPlayer(2, 'VORNOI')
+
+					Aiset = False
+					otherOpponent = False
+					ai = 'minimax'
+					minnimax_match = (10000 * rate) + minimam_match
+
+				else:
+					#mini_memory.reset()
+					rate = vs_min_p1_win / minimax_game
+					minnimax_match = 10000 - minnimax_match
+					vs_min_p1_win = 0
+					minimax_game = 0
+					Aiset = True
+					player_2 = Ai(epsilon)
+					player_2.epsilon = epsilon
+					otherOpponent = True
+					ai = 'basic Ai'
+
+				changeAi = 0
 
 			# Increment the counters
 			game_counter += 1
@@ -254,7 +308,8 @@ def train(model):
 
 			# Initialize the game
 			player_1.epsilon = epsilon
-			player_2.epsilon = epsilon
+			if(Aiset):
+				player_2.epsilon = epsilon
 			game = Game(MAP_WIDTH,MAP_HEIGHT, [
 						PositionPlayer(1, player_1, [x1, y1]),
 						PositionPlayer(2, player_2, [x2, y2]),])
@@ -298,73 +353,70 @@ def train(model):
 
 				# Compute the reward for each player
 				reward_p1 = historyStep
-				reward_p2 = +1
+				reward_p2 = historyStep
 				if historyStep +1 == len(game.history)-1:
 					if game.winner is None:
 						null_games += 1
 						reward_p1 = 0
 						reward_p2 = 0
 
-						sample1 = blowup1.delete_old(len(blowup1.memory))
-						for i in sample1:
-							list1 = list(i)
-							list1[3] = 1
-							list1[3] = torch.from_numpy(np.array([list1[3]], dtype=np.float32)).unsqueeze(0)
-							memory.push(list1[0], list1[1], list1[2], list1[3], list1[4])
-
-						reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
-						terminal = True
-						memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
+						# sample1 = blowup1.delete_old(len(blowup1.memory))
+						# for i in sample1:
+						# 	list1 = list(i)
+						# 	list1[3] = 1
+						# 	list1[3] = torch.from_numpy(np.array([list1[3]], dtype=np.float32)).unsqueeze(0)
+						# 	memory.push(list1[0], list1[1], list1[2], list1[3], list1[4])
+						#
+						# reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
+						# terminal = True
+						# memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
 
 					elif game.winner == 1:
 						reward_p1 = 100
-						reward_p2 = -100
+						reward_p2 = -25
 						p1_victories +=1
 
-						sample1 = blowup1.delete_old(len(blowup1.memory))
-
-						for i in sample1:
-							list1 = list(i)
-							list1[3] = list1[3].item()
-							list1[3] = torch.from_numpy(np.array([list1[3]], dtype=np.float32)).unsqueeze(0)
-							memory.push(list1[0], list1[1], list1[2], list1[3], list1[4])
-
-						reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
-						terminal = True
-						memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
-
-
-
+						# sample1 = blowup1.delete_old(len(blowup1.memory))
+						#
+						# for i in sample1:
+						# 	list1 = list(i)
+						# 	list1[3] = list1[3].item()
+						# 	list1[3] = torch.from_numpy(np.array([list1[3]], dtype=np.float32)).unsqueeze(0)
+						# 	memory.push(list1[0], list1[1], list1[2], list1[3], list1[4])
+						#
+						# reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
+						# terminal = True
+						# memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
 					else:
-						reward_p1 = -100
+						reward_p1 = -25
 						reward_p2 = 100
 						p2_victories += 1
 
-						sample1 = blowup1.delete_old(len(blowup1.memory))
-						for i in sample1:
-							list1 = list(i)
-							list1[3] = (-list1[3].item())
-							list1[3] = torch.from_numpy(np.array([list1[3]], dtype=np.float32)).unsqueeze(0)
-
-							memory.push(list1[0], list1[1], list1[2], list1[3], list1[4])
-
-						reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
-						terminal = True
-						memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
-
-
-
+						# sample1 = blowup1.delete_old(len(blowup1.memory))
+						# for i in sample1:
+						# 	list1 = list(i)
+						# 	list1[3] = (-list1[3].item())
+						# 	list1[3] = torch.from_numpy(np.array([list1[3]], dtype=np.float32)).unsqueeze(0)
+						#
+						# 	memory.push(list1[0], list1[1], list1[2], list1[3], list1[4])
+						#
+						# reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
+						# terminal = True
+						# memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
+					if not (Aiset):
+						minimax_game += 1
+					terminal=True
 
 				reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
 				reward_p2 = torch.from_numpy(np.array([reward_p2], dtype=np.float32)).unsqueeze(0)
 
 				#Save the transition for each player
-				#memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
-				# if not(otherOpponent) :
-				# 	memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
+				memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
+				if not(otherOpponent) :
+					mini_memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
 
-				if not (terminal):
-					blowup1.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
+				# if not (terminal):
+				# 	blowup1.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
 
 				# Update old state for each player
 				old_state_p1 = new_state_p1
@@ -379,7 +431,11 @@ def train(model):
 				epsilon = epsilon_temp
 
 		# Get a sample for training
-		transitions = memory.sample(min(len(memory),model.batch_size))
+		if (otherOpponent):
+			transitions = memory.sample(min(len(memory),model.batch_size))
+		if not (otherOpponent):
+
+			transitions = mini_memory.sample(min(len(mini_memory), model.batch_size))
 		#print(transitions)
 		#print(transitions)
 		batch = Transition(*zip(*transitions))
@@ -429,6 +485,13 @@ def train(model):
 			print("Loss =", loss_value)
 			print("Epsilon =", epsilon)
 			print("")
+			#print("Max duration :", max_du)
+			print("score p1 vs p2 =", win_p1, ":", win_p2)
+			print("ai state=", ai)
+			p1_winrate = p1_victories / (GAME_CYCLE)
+			print("mini", minnimax_match)
+			#print("old", old_memory.position, "posi", len(old_memory.memory), "mem size")
+			print("new", memory.position, "posi", len(memory.memory), "mem size")
 
 			vis_loss = float(loss_value)
 			vis.line(X=torch.tensor([game_counter]),
@@ -466,8 +529,8 @@ def train(model):
 
 def main():
 	model = Net().to(device)
-	# if os.path.isfile('ais/' + folderName + '/10_ai.bak'):
-	#   	model.load_state_dict(torch.load('ais/' + folderName + '/10_ai.bak'))
+	if os.path.isfile('ais/' + folderName + '/_ai.bak'):
+	  	model.load_state_dict(torch.load('ais/' + folderName + '/_ai.bak'))
 	train(model)
 
 if __name__ == "__main__":
