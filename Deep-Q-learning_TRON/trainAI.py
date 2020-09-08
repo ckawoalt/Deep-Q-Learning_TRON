@@ -415,6 +415,7 @@ def train(model):
 				#Save the transition for each player
 				memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
 				memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
+
 				# if not(otherOpponent) :
 				# 	mini_memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
 
