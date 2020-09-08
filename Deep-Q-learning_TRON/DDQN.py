@@ -74,7 +74,6 @@ class Net(nn.Module):
         return x
 
 class Agent(Player):
-
     def __init__(self,epsilon):
         super(Ai, self).__init__()
 
@@ -86,7 +85,6 @@ class Agent(Player):
                    action_size (int): dimension of each action
                    seed (int): random seed
                """
-
         # Q- Network
         self.qnetwork_local = Net().to(device)
         self.qnetwork_target = Net().to(device)
@@ -261,7 +259,7 @@ class Ai(Player):
         if next_action == 4:
             next_direction = Direction.LEFT
 
-        return next_direction
+        return next_direction,next_action
 
 
 Transition = namedtuple('Transition',('old_state', 'action', 'new_state', 'reward', 'terminal'))
@@ -395,60 +393,80 @@ def train(model):
                 # Compute the reward for each player
                 reward_p1 = historyStep
                 reward_p2 = historyStep
+                reward_p1=0;
 
-                if historyStep +1 == len(game.history)-1:
-                    if game.winner is None:
-                        null_games += 1
-                        reward_p1 = 0
-                        reward_p2 = 0
+            while not(terminal):
 
-                    elif game.winner == 1:
-                        reward_p1 = 100
-                        reward_p2 = -25
-                        p1_victories +=1
-
-                        if not (Aiset):
-                            vs_min_p1_win+=1
-                    else:
-                        reward_p1 = -25
-                        reward_p2 = 100
-                        p2_victories += 1
-
-                    if not (Aiset):
-                        minimax_game += 1
-                    terminal=True
-
+                action = Agent.act(old_state_p1, epsilon)
+                new_state_p1, reward_p1, terminal, _ = game.step(action)
                 reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
-                reward_p2 = torch.from_numpy(np.array([reward_p2], dtype=np.float32)).unsqueeze(0)
+                Agent.step(old_state_p1, action_p1, reward_p1, new_state_p1, terminal)
 
-                #Save the transition for each player
-                memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
-                memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
+                        ## above step decides whether we will train(learn) the network
+                        ## actor (local_qnetwork) or we will fill the replay buffer
+                        ## if len replay buffer is equal to the batch size then we will
+                        ## train the network or otherwise we will add experience tuple in our
+                        ## replay buffer.
 
-                # Update old state for each player
                 old_state_p1 = new_state_p1
-                old_state_p2 = new_state_p2
+
+                if terminal:
+                    torch.save(Agent.qnetwork_local.state_dict(), 'checkpoint.pth')
+                    break
+                #
+                # if historyStep +1 == len(game.history)-1:
+                #     if game.winner is None:
+                #         null_games += 1
+                #         reward_p1 = 0
+                #         reward_p2 = 0
+                #
+                #     elif game.winner == 1:
+                #         reward_p1 = 100
+                #         reward_p2 = -25
+                #         p1_victories +=1
+                #
+                #         if not (Aiset):
+                #             vs_min_p1_win+=1
+                #     else:
+                #         reward_p1 = -25
+                #         reward_p2 = 100
+                #         p2_victories += 1
+                #
+                #     if not (Aiset):
+                #         minimax_game += 1
+                #     terminal=True
+                #
+                # reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
+                # reward_p2 = torch.from_numpy(np.array([reward_p2], dtype=np.float32)).unsqueeze(0)
+                #
+                # #Save the transition for each player
+                # memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
+                # memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
+                #
+                # # Update old state for each player
+                # old_state_p1 = new_state_p1
+                # old_state_p2 = new_state_p2
 
             # Update exploration rate
-            nouv_epsilon = epsilon*DECAY_RATE
-            if nouv_epsilon > ESPILON_END:
-                epsilon = nouv_epsilon
+        nouv_epsilon = epsilon*DECAY_RATE
+        if nouv_epsilon > ESPILON_END:
+            epsilon = nouv_epsilon
 
-            if epsilon==0 and game_counter%100==0 :
-                epsilon = epsilon_temp
+        if epsilon==0 and game_counter%100==0 :
+            epsilon = epsilon_temp
 
-        # Get a sample for training
-        transitions = memory.sample(min(len(memory), model.batch_size))
-
-        batch = Transition(*zip(*transitions))
-        old_state_batch = torch.cat(batch.old_state)
-        action_batch = torch.cat(batch.action).long()
-        new_state_batch = torch.cat(batch.new_state)
-        reward_batch = torch.cat(batch.reward).to(device)
-
-        # Compute predicted Q-values for each action
-        pred_q_values_batch = torch.sum(model(old_state_batch).gather(1, action_batch.to(device)),dim=1)
-        pred_q_values_next_batch = model(new_state_batch)
+        # # Get a sample for training
+        # transitions = memory.sample(min(len(memory), model.batch_size))
+        #
+        # batch = Transition(*zip(*transitions))
+        # old_state_batch = torch.cat(batch.old_state)
+        # action_batch = torch.cat(batch.action).long()
+        # new_state_batch = torch.cat(batch.new_state)
+        # reward_batch = torch.cat(batch.reward).to(device)
+        #
+        # # Compute predicted Q-values for each action
+        # pred_q_values_batch = torch.sum(model(old_state_batch).gather(1, action_batch.to(device)),dim=1)
+        # pred_q_values_next_batch = model(new_state_batch)
 
         # Compute targeted Q-value for action performed
         target_q_values_batch = torch.cat(tuple(reward_batch[i] if batch[4][i]
@@ -462,19 +480,19 @@ def train(model):
             if (game_counter % 100 == 0):
                 under_minus_26 = torch.sum(pred_q_values_next_batch < -25).squeeze()
 
-        model.zero_grad()
+        # model.zero_grad()
 
         # Compute the loss
-        target_q_values_batch = target_q_values_batch.detach()
-        loss = criterion(pred_q_values_batch,target_q_values_batch)
-        #loss=F.smooth_l1_loss(pred_q_values_batch,target_q_values_batch)
+        # target_q_values_batch = target_q_values_batch.detach()
+        # loss = criterion(pred_q_values_batch,target_q_values_batch)
+        # #loss=F.smooth_l1_loss(pred_q_values_batch,target_q_values_batch)
+        #
+        # # Do backward pass
+        # loss.backward()
+        # optimizer.step()
 
-        # Do backward pass
-        loss.backward()
-        optimizer.step()
-
-        # Update bak
-        torch.save(model.state_dict(), 'ais/' + folderName +'/'+'_ai.bak')
+        # # Update bak
+        # torch.save(model.state_dict(), 'ais/' + folderName +'/'+'_ai.bak')
         p1_winrate = p1_victories / (GAME_CYCLE)
         # Display results
         if (game_counter%DISPLAY_CYCLE)==0:
