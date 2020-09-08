@@ -26,7 +26,7 @@ GAMMA = 0.9 # Discount factor
 
 # Exploration parameters
 EPSILON_START = 1
-ESPILON_END = 0.02
+ESPILON_END = 0.003
 DECAY_RATE = 0.999
 
 # Map parameters
@@ -387,6 +387,8 @@ def train(model):
 						# reward_p1 = torch.from_numpy(np.array([reward_p1], dtype=np.float32)).unsqueeze(0)
 						# terminal = True
 						# memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
+						if not (Aiset):
+							vs_min_p1_win+=1
 					else:
 						reward_p1 = -25
 						reward_p2 = 100
@@ -412,8 +414,9 @@ def train(model):
 
 				#Save the transition for each player
 				memory.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
-				if not(otherOpponent) :
-					mini_memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
+				memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
+				# if not(otherOpponent) :
+				# 	mini_memory.push(old_state_p2, action_p2, new_state_p2, reward_p2, terminal)
 
 				# if not (terminal):
 				# 	blowup1.push(old_state_p1, action_p1, new_state_p1, reward_p1, terminal)
@@ -431,11 +434,12 @@ def train(model):
 				epsilon = epsilon_temp
 
 		# Get a sample for training
-		if (otherOpponent):
-			transitions = memory.sample(min(len(memory),model.batch_size))
-		if not (otherOpponent):
-
-			transitions = mini_memory.sample(min(len(mini_memory), model.batch_size))
+		transitions = memory.sample(min(len(memory), model.batch_size))
+		# if (otherOpponent):
+		# 	transitions = memory.sample(min(len(memory),model.batch_size))
+		# if not (otherOpponent):
+		#
+		# 	transitions = mini_memory.sample(min(len(mini_memory), model.batch_size))
 		#print(transitions)
 		#print(transitions)
 		batch = Transition(*zip(*transitions))

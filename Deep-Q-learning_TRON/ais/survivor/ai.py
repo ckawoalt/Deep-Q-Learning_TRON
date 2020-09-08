@@ -26,75 +26,67 @@ class Net(nn.Module):
 		super(Net, self).__init__()
 		self.batch_size = BATCH_SIZE
 		self.gamma = GAMMA
-		self.conv1 = torch.nn.Sequential(
-			torch.nn.Conv2d(1, 4, kernel_size=5, stride=2, padding=2),
-			torch.nn.ReLU(),
-			torch.nn.MaxPool2d(kernel_size=3, stride=2))
+		# self.conv1=nn.Conv2d(1, 8, 7,padding=3)
+		# self.conv2 = nn.Conv2d(8, 32, 5, padding=2)
+		# self.conv3 = nn.Conv2d(32, 128, 5,padding=2,stride=2)
+		# self.conv4 = nn.Conv2d(128, 256, 3, padding=1)
 
-		self.conv2 = torch.nn.Sequential(
-			torch.nn.Conv2d(4, 16, kernel_size=3, stride=1, padding=1),
-			torch.nn.ReLU())
+		self.conv1=nn.Conv2d(1, 32, 6)
+		self.conv2 = nn.Conv2d(32, 64, 3)
 
-		self.conv3 = torch.nn.Sequential(
-			torch.nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
-			torch.nn.ReLU())
 
-		self.conv4 = torch.nn.Sequential(
-			torch.nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=2),
-			torch.nn.ReLU(),
-			torch.nn.MaxPool2d(kernel_size=2, stride=1))
 
-		# self.conv1 = nn.Conv2d(1, 8, 6,padding=3,stride=3)
-		# self.conv2 = nn.Conv2d(8, 32, 3)
-		# self.conv3 = nn.Conv2d(32, 64, 3)
+		self.maxPool = nn.MaxPool2d(kernel_size=2, stride=2)
+		self.dropout=nn.Dropout(p=0.2)
+		#self.batchnorm=nn.BatchNorm2d(1)
 
-		self.batch_norm = nn.BatchNorm2d(1)
-		self.dropout = nn.Dropout(0.4)
+		self.relu=nn.ReLU()
+		# self.fc1 = nn.Linear(128 * 1 * 1, 256)
+		# self.fc1 = nn.Linear(512, 1024)
+		# self.fc2 = nn.Linear(256, 512)
+		# self.fc3 = nn.Linear(512, 256)
+		# self.fc4 = nn.Linear(256, 64)
+		# self.fc5 = nn.Linear(64, 4)
 
-		self.fc0 = nn.Linear(64, 128)
-		self.fc1 = nn.Linear(128, 256)
-		self.fc2 = nn.Linear(256, 512, bias=True)
-		self.fc3 = nn.Linear(512, 512, bias=True)
-		self.fc4 = nn.Linear(512, 256, bias=True)
-		self.fc5 = nn.Linear(256, 128, bias=True)
-		self.fc6 = nn.Linear(128, 64, bias=True)
-		self.fc7 = nn.Linear(64, 32, bias=True)
-		self.fc8 = nn.Linear(32, 4, bias=True)
+		self.fc1 = nn.Linear(64*5*5, 256)
+		self.fc2 = nn.Linear(256, 4)
 
-		torch.nn.init.xavier_uniform_(self.fc1.weight)
-		torch.nn.init.xavier_uniform_(self.fc2.weight)
-		torch.nn.init.xavier_uniform_(self.fc3.weight)
-		torch.nn.init.xavier_uniform_(self.fc4.weight)
-		torch.nn.init.xavier_uniform_(self.fc5.weight)
-		torch.nn.init.xavier_uniform_(self.fc6.weight)
-		torch.nn.init.xavier_uniform_(self.fc7.weight)
-		torch.nn.init.xavier_uniform_(self.fc8.weight)
+		# torch.nn.init.xavier_uniform_(self.fc0.weight)
+		# torch.nn.init.xavier_uniform_(self.fc1.weight)
+		# torch.nn.init.xavier_uniform_(self.fc2.weight)
+		# torch.nn.init.xavier_uniform_(self.fc3.weight)
+		# torch.nn.init.xavier_uniform_(self.fc4.weight)
+		# torch.nn.init.xavier_uniform_(self.fc5.weight)
 
 	def forward(self, x):
-		normalized = self.batch_norm(x)
 
-		# x = self.dropout(F.relu(self.conv1(normalized)))
-		# x = self.dropout(F.relu(self.conv2(x)))
-		# x = self.dropout(F.relu(self.conv3(x)))
-		# x = self.dropout(F.relu(self.conv4(x)))
+		x=x.cuda()
 
-		x = self.dropout(F.relu(self.conv1(normalized)))
-		x = self.dropout(self.conv2(x))
+		# id = x
+		# x=self.batchnorm(x)
+		# x = self.relu(self.conv1(x))
+		# x = self.conv2(x)
+		# x=x+id
+		# self.relu(x)
+		# x = self.relu(self.conv3(x))
+		# x = self.maxPool(x)
 
-		x = self.dropout(self.conv3(x))
-		x = self.dropout(self.conv4(x))
+		# x = x.view(-1, 128*1*1)
 
-		x = x.view(-1, 64)
+		x = self.relu(self.conv1(x))
+		x = self.relu(self.conv2(x))
+		x = x.view(-1, 64 * 5 * 5)
 
-		x = self.dropout(F.relu(self.fc0(x)))
-		x = self.dropout(F.relu(self.fc1(x)))
-		x = self.dropout(F.relu(self.fc2(x)))
-		x = self.dropout(F.relu(self.fc3(x)))
-		x = self.dropout(F.relu(self.fc4(x)))
-		x = self.dropout(F.relu(self.fc5(x)))
-		x = self.dropout(F.relu(self.fc6(x)))
-		x = self.dropout(F.relu(self.fc7(x)))
-		x = self.fc8(x)
+		# x = self.dropout(self.relu(self.fc0(x)))
+		# x = self.dropout(self.relu(self.fc1(x)))
+		# x = self.dropout(self.relu(self.fc2(x)))
+		# x = self.dropout(self.relu(self.fc3(x)))
+		# x = self.dropout(self.relu(self.fc4(x)))
+		# x = self.fc5(x)
+
+		x=self.relu(self.fc1(x))
+		x = self.fc2(x)
+
 
 		return x
 
@@ -103,16 +95,16 @@ class Ai(Player):
 
 	def __init__(self,epsilon=0):
 		super(Ai, self).__init__()
-		self.net = Net()
+		self.net = Net().to('cuda')
 		self.epsilon = epsilon
 		# Load network weights if they have been initialized already
-		if os.path.isfile('ais/' + folderName + '/ai.bak'):
+		if os.path.isfile('ais/' + folderName + '/_ai.bak'):
 			print("?")
-			self.net.load_state_dict(torch.load('ais/' + folderName + '/ai.bak'))
+			self.net.load_state_dict(torch.load('ais/' + folderName + '/_ai.bak'))
 			#print("load reussi 1 ")
 			
-		elif os.path.isfile(self.find_file('ai.bak')):
-			self.net.load_state_dict(torch.load(self.find_file('ai.bak')))
+		elif os.path.isfile(self.find_file('_ai.bak')):
+			self.net.load_state_dict(torch.load(self.find_file('_ai.bak')))
 			#print("load reussi 2 ")
 
 	def action(self, map, id):
@@ -124,7 +116,8 @@ class Ai(Player):
 		output = self.net(input)
 
 		_, predicted = torch.max(output.data, 1)
-		predicted = predicted.numpy()
+		predicted = predicted.cpu().numpy()
+
 		next_action = predicted[0] + 1
 
 		if random.random() <= self.epsilon:

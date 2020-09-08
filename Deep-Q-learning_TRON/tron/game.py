@@ -117,6 +117,33 @@ class Game:
 
         return True
 
+    def step(self, window=None):
+        if window:
+            window.render_map(self.map())
+        if window:
+            sleep(0.3)
+            # sleep(0.5)
+        alive_count = 0
+        alive = None
+
+        if window:
+            sleep(0.3)
+        # sleep(0.5)
+
+        if not self.next_frame(window):
+           return
+
+        for pp in self.pps:
+            if pp.alive:
+                alive_count += 1
+                alive = pp.id
+
+        if alive_count <= 1:
+            if alive_count == 1:
+                if self.pps[0].position[0] != self.pps[1].position[0] or \
+                        self.pps[0].position[1] != self.pps[1].position[1]:
+                    self.winner = alive
+
     def main_loop(self, window = None):
 
         if window:
