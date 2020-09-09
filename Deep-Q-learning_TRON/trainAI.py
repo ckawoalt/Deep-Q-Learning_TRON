@@ -339,6 +339,7 @@ def train(model):
 				new_state_p1 = game.history[historyStep+1].map.state_for_player(1)
 				new_state_p1 = np.reshape(new_state_p1, (1, 1, new_state_p1.shape[0], new_state_p1.shape[1]))
 				new_state_p1 = torch.from_numpy(new_state_p1).float()
+
 				new_state_p2 = game.history[historyStep+1].map.state_for_player(2)
 				new_state_p2 = np.reshape(new_state_p2, (1, 1, new_state_p2.shape[0], new_state_p2.shape[1]))
 				new_state_p2 = torch.from_numpy(new_state_p2).float()

@@ -89,5 +89,6 @@ class Map:
 
     def __setitem__(self, position, other):
         (i, j) = position
+        print(position)
         self._data[i+1][j+1] = other
 

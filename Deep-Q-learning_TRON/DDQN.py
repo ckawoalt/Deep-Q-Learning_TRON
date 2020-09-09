@@ -61,7 +61,6 @@ class Net(nn.Module):
         self.fc2 = nn.Linear(256, 4)
 
     def forward(self, x):
-
         x=x.cuda()
 
         x = self.relu(self.conv1(x))
@@ -86,8 +85,8 @@ class Agent(Player):
                    seed (int): random seed
                """
         # Q- Network
-        self.qnetwork_local = Net().to(device)
-        self.qnetwork_target = Net().to(device)
+        self.qnetwork_local = Net().cuda()
+        self.qnetwork_target = Net().cuda()
         self.action_size=4
         # if os.path.isfile('ais/' + folderName  +'/'+ '_ai.bak'):
         #     self.net.load_state_dict(torch.load('ais/' + folderName +'/' + '_ai.bak'))
@@ -187,7 +186,7 @@ class Agent(Player):
 
         with torch.no_grad():
             labels_next = self.qnetwork_target(next_state).detach().max(1)[0].unsqueeze(1)
-
+        print("?",labels_next)
         # .detach() ->  Returns a new Tensor, detached from the current graph.
         labels = rewards + (gamma * labels_next * (1 - dones))
 
@@ -243,10 +242,8 @@ class ReplayBuffer:
         states = torch.from_numpy(np.vstack([e.state for e in experiences if e is not None])).float().to(device)
         actions = torch.from_numpy(np.vstack([e.action for e in experiences if e is not None])).long().to(device)
         rewards = torch.from_numpy(np.vstack([e.reward for e in experiences if e is not None])).float().to(device)
-        next_states = torch.from_numpy(np.vstack([e.next_state for e in experiences if e is not None])).float().to(
-            device)
-        dones = torch.from_numpy(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8)).float().to(
-            device)
+        next_states = torch.from_numpy(np.vstack([e.next_state for e in experiences if e is not None])).float().to(device)
+        dones = torch.from_numpy(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8)).float().to(device)
 
         return (states, actions, rewards, next_states, dones)
 
@@ -334,10 +331,17 @@ def train(local_model,target_model):
             while not(done):
 
                # print("1")
+
                 p1_action = player.action(old_state_p1)
                 p2_action = player.action(old_state_p2)
 
                 p1_next_state, p1_reward,p2_next_state, p2_reward,done= game.step(p1_action, p2_action)
+
+                p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
+                p1_next_state = torch.from_numpy(p1_next_state).float()
+
+                p2_next_state = np.reshape(p2_next_state, (1, 1, p2_next_state.shape[0], p2_next_state.shape[1]))
+                p2_next_state = torch.from_numpy(p2_next_state).float()
 
                 if done:
                     if game.winner is None:
@@ -355,17 +359,20 @@ def train(local_model,target_model):
                         p2_reward = 100
                         p2_victories += 1
 
-                p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
-                p1_next_state = torch.from_numpy(p1_next_state).float()
-
-                p2_next_state = np.reshape(p2_next_state, (1, 1, p2_next_state.shape[0], p2_next_state.shape[1]))
-                p2_next_state = torch.from_numpy(p2_next_state).float()
+                # next_originp1=p1_next_state
+                #
+                # p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
+                # p1_next_state = torch.from_numpy(p1_next_state).float()
+                #
+                # p2_next_state = np.reshape(p2_next_state, (1, 1, p2_next_state.shape[0], p2_next_state.shape[1]))
+                # p2_next_state = torch.from_numpy(p2_next_state).float()
 
                 # p1_reward = torch.from_numpy(np.array([p1_reward], dtype=np.float32)).unsqueeze(0)
                 # p2_reward = torch.from_numpy(np.array([p2_reward], dtype=np.float32)).unsqueeze(0)
 
+
                 player.step(old_state_p1, p1_action, p1_reward, p1_next_state, done)
-                player.step(old_state_p1, p2_action, p2_reward, p2_next_state, done)
+                player.step(old_state_p2, p2_action, p2_reward, p2_next_state, done)
 
                 old_state_p1 = p1_next_state
                 old_state_p2 = p2_next_state
@@ -448,8 +455,8 @@ def train(local_model,target_model):
 
 def main():
     #model = Net().to(device)
-    local_model = Net().to(device)
-    target_model = Net().to(device)
+    local_model = Net()
+    target_model = Net()
 
     # if os.path.isfile('ais/' + folderName + '/_ai.bak'):
     #     local_model.load_state_dict(torch.load('ais/' + folderName + '/_ai.bak'))
