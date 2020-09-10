@@ -33,9 +33,7 @@ class Player(object):
     def next_position_and_direction(self, current_position, id, map):
 
         direction = self.action(map, id)
-        nextmap=self.next_position(current_position, direction)
-
-        return (nextmap,direction)
+        return (self.next_position(current_position, direction), direction)
 
     def action(self, map, id):
 

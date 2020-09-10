@@ -80,7 +80,7 @@ class Map:
     def state_for_player(self, p):
 
 
-        return self.apply(lambda tile: self.color(tile, p)).array()
+        return self.apply(lambda tile: self.color(tile, p)).array().T
 
 
     def __getitem__(self, index):
@@ -89,6 +89,6 @@ class Map:
 
     def __setitem__(self, position, other):
         (i, j) = position
-        print(position)
+
         self._data[i+1][j+1] = other
 

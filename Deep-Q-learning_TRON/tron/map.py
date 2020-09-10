@@ -49,6 +49,7 @@ class Map:
 
         converted = Map(self.width, self.height, 0, 0)
         converted._data = np.array([[converter(self._data[i][j]) for i in range(self.height + 2)] for j in range(self.width + 2)])
+
         return converted
 
     def array(self):

@@ -16,7 +16,6 @@ class PositionPlayer:
         self.player = player
         self.position = position
         self.alive = True
-        self.reword=0
 
     def body(self):
 
@@ -48,13 +47,14 @@ class Game:
         self.width = width
         self.height = height
         mmap = Map(width, height, Tile.EMPTY, Tile.WALL)
-        self.reword=0
-        self.done=False
         self.history = [HistoryElement(mmap, None, None)]
         self.pps = pps
         self.winner = None
-        self.next_p1=[]
-        self.next_p2=[]
+
+        self.next_p1 = []
+        self.next_p2 = []
+        self.reword = 0
+        self.done = False
 
         for pp in self.pps:
             self.history[-1].map[pp.position[0], pp.position[1]] = pp.head()
@@ -63,47 +63,29 @@ class Game:
 
         return self.history[-1].map.clone()
 
-    def next_frame(self,p1_action,p2_action, window=None):
-        action=[p1_action,p2_action]
+    def next_frame(self,action_p1,action_p2):
 
         map_clone = self.map()
 
+
+        action=[action_p1,action_p2]
         for pp in self.pps:
+            #print(pp.position,":")
             map_clone[pp.position[0], pp.position[1]] = pp.body()
 
         for id, pp in enumerate(self.pps):
+            # try:
+            (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position,action[id])
+            # except:
+            #     print("ERRRRRRRRRRRRRRRRRRRRROR")
+            #     if id == 0:
+            #         self.winner = 2
+            #     elif id == 1:
+            #         self.winner = 1
+            #     return False
 
-            try:
-                (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, action[id])
-            except:
-                print("ERRRRRRRRRRRRRRRRRRRRROR")
-                if id == 0:
-                    self.winner = 2
-                elif id == 1:
-                    self.winner = 1
-                return False
-
-
-
-
-        if window:
-            import pygame
-            while True:
-                event = pygame.event.poll()
-
-                if event.type == pygame.NOEVENT:
-                    break
-
-                for pp in self.pps:
-                    try:
-                        pp.player.manage_event(event)
-                    except:
-                        if id == 0:
-                            self.winner = 2
-                        elif id == 1:
-                            self.winner = 1
-                        return False
-
+        self.history[-1].player_one_direction = self.pps[0].player.direction
+        self.history[-1].player_two_direction = self.pps[1].player.direction
 
         for (id, pp) in enumerate(self.pps):
             # print(id,"",pp.position)
@@ -115,30 +97,31 @@ class Game:
 
             elif map_clone[pp.position[0], pp.position[1]] is not Tile.EMPTY:
                 pp.alive = False
-                print("?!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
                 map_clone[pp.position[0], pp.position[1]] = pp.head()
+
 
             else:
                 map_clone[pp.position[0], pp.position[1]] = pp.head()
 
+
+        self.history.append(HistoryElement(map_clone, None, None))
         self.next_p1 = self.history[-1].map.state_for_player(1)
         self.next_p2 = self.history[-1].map.state_for_player(2)
 
-        self.history.append(HistoryElement(map_clone, None, None))
-
         return True
 
-    def step(self,action_p1,action_p2):
+    def step(self,action_p1,action_p2 ):
 
         alive_count = 0
         alive = None
+        self.reword += 1
 
 
-        if not self.next_frame(action_p1,action_p2,window=None):
+
+        if not self.next_frame(action_p1,action_p2):
             self.done = True
             return self.next_p1,self.reword,self.next_p2,self.reword,self.done
-
-        self.reword += 1
 
         for pp in self.pps:
             if pp.alive:
@@ -147,18 +130,15 @@ class Game:
 
         if alive_count <= 1:
             if alive_count == 1:
-
                 if self.pps[0].position[0] != self.pps[1].position[0] or \
                         self.pps[0].position[1] != self.pps[1].position[1]:
-
                     self.winner = alive
-                    self.done = True
+
+            self.done = True
+
+        return self.next_p1, self.reword, self.next_p2, self.reword, self.done
 
 
-        print(self.next_p1)
-        print(self.reword)
-        print(self.next_p2)
-        return self.next_p1,self.reword,self.next_p2,self.reword,self.done
 
     def main_loop(self, window=None):
 

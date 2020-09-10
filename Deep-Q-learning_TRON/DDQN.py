@@ -5,6 +5,8 @@ from collections import namedtuple,deque
 from torch.utils.tensorboard import SummaryWriter
 from tron.minimax import MinimaxPlayer
 
+import copy
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -18,10 +20,10 @@ import os
 
 # General parameters
 folderName = 'survivor'
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cpu' if torch.cuda.is_available() else 'cpu'
 
 # Net parameters
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 GAMMA = 0.9 # Discount factor
 
 # Exploration parameters
@@ -61,7 +63,8 @@ class Net(nn.Module):
         self.fc2 = nn.Linear(256, 4)
 
     def forward(self, x):
-        x=x.cuda()
+
+        #x=x.cuda()
 
         x = self.relu(self.conv1(x))
         x = self.relu(self.conv2(x))
@@ -85,8 +88,8 @@ class Agent(Player):
                    seed (int): random seed
                """
         # Q- Network
-        self.qnetwork_local = Net().cuda()
-        self.qnetwork_target = Net().cuda()
+        self.qnetwork_local = Net().to(device)
+        self.qnetwork_target = Net().to(device)
         self.action_size=4
         # if os.path.isfile('ais/' + folderName  +'/'+ '_ai.bak'):
         #     self.net.load_state_dict(torch.load('ais/' + folderName +'/' + '_ai.bak'))
@@ -105,6 +108,9 @@ class Agent(Player):
 
         # Learn every UPDATE_EVERY time steps.
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
+        #print(len(self.memory))
+       # print(self.t_step,"step")
+
         if self.t_step == 0:
             # If enough samples are available in memory, get radom subset and learn
 
@@ -131,14 +137,16 @@ class Agent(Player):
         # Epsilon -greedy action selction
 
         if random.random() > self.epsilon:
-            return np.argmax(action_values.cpu().data.numpy()+1)
+            return np.argmax(action_values.cpu().data.numpy())+1
         else:
             return random.choice(np.arange(self.action_size)+1)
+
 
     def find_file(self, name):
         return '/'.join(self.__module__.split('.')[:-1]) + '/' + name
 
     def get_direction(self,next_action):
+
         if next_action == 1:
             next_direction = Direction.UP
         if next_action == 2:
@@ -153,8 +161,7 @@ class Agent(Player):
     def next_position_and_direction(self, current_position,action):
 
         direction = self.get_direction(action)
-
-        return (self.next_position(current_position, direction), direction)
+        return (self.next_position(current_position, direction),direction)
 
 
     def next_position(self, current_position, direction):
@@ -168,6 +175,7 @@ class Agent(Player):
         if direction == Direction.LEFT:
             return (current_position[0], current_position[1] - 1)
 
+
     def learn(self, experiences, gamma):
         """Update value parameters using given batch of experience tuples.
         Params
@@ -176,27 +184,34 @@ class Agent(Player):
             gamma (float): discount factor
         """
         states, actions, rewards, next_state, dones = experiences
-        print(experiences)
+
         criterion = torch.nn.MSELoss()
         self.qnetwork_local.train()
         self.qnetwork_target.eval()
         # shape of output from the model (batch_size,action_dim) = (64,4)
 
-        predicted_targets = self.qnetwork_local(states).gather(1, actions)
+        predicted_targets = self.qnetwork_local(states).gather(1, actions-1)
 
         with torch.no_grad():
             labels_next = self.qnetwork_target(next_state).detach().max(1)[0].unsqueeze(1)
-        print("?",labels_next)
+
+        #print("?",labels_next)
         # .detach() ->  Returns a new Tensor, detached from the current graph.
+
         labels = rewards + (gamma * labels_next * (1 - dones))
 
         loss = criterion(predicted_targets, labels).to(device)
+        loss_string = str(loss)
+        loss_string = loss_string[7:len(loss_string)]
+        loss_value = loss_string.split(',')[0]
+        print("Loss =", loss_value)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
         # ------------------- update target network ------------------- #
         self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)
+
 
     def soft_update(self, local_model, target_model, tau):
         """Soft update model parameters.
@@ -253,8 +268,8 @@ class ReplayBuffer:
 
 def train(local_model,target_model):
     # writer = SummaryWriter()
-    #vis = visdom.Visdom()
-
+    # vis = visdom.Visdom()
+    #
     # vis.close(env="main")
     # loss_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='loss_tracker', legend=['loss'], showlegend=True))
     # du_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='duration_tracker', legend=['duration'], showlegend=True))
@@ -283,6 +298,8 @@ def train(local_model,target_model):
     rate=0
     # Start training
 
+    brain = Agent()
+
     while True:
 
         # Initialize the game cycle parameters
@@ -290,11 +307,10 @@ def train(local_model,target_model):
         p1_victories = 0
         p2_victories = 0
         null_games = 0
-        player = Agent()
 
         # Play a cycle of games
         while cycle_step < GAME_CYCLE:
-
+            #print(cycle_step)
             # Increment the counters
             game_counter += 1
             cycle_step += 1
@@ -310,12 +326,11 @@ def train(local_model,target_model):
                 y1 = random.randint(0,MAP_HEIGHT-1)
             # Initialize the game
 
-            player.epsilon = epsilon
-
-
+            player1 = copy.deepcopy(brain)
+            player2 = copy.deepcopy(brain)
             game = Game(MAP_WIDTH,MAP_HEIGHT, [
-                PositionPlayer(1, player, [x1, y1]),
-                PositionPlayer(2, player, [x2, y2]),])
+                PositionPlayer(1,player1, [x1, y1]),
+                PositionPlayer(2,player2, [x2, y2]),])
 
             # Get the initial state for each player
             old_state_p1 = game.map().state_for_player(1)
@@ -330,12 +345,15 @@ def train(local_model,target_model):
 
             while not(done):
 
-               # print("1")
+               # print
+                player1 = copy.deepcopy(brain)
+                player2 = copy.deepcopy(brain)
 
-                p1_action = player.action(old_state_p1)
-                p2_action = player.action(old_state_p2)
+                p1_action = player1.action(old_state_p1)
+                p2_action = player2.action(old_state_p2)
 
                 p1_next_state, p1_reward,p2_next_state, p2_reward,done= game.step(p1_action, p2_action)
+                move_counter += 1
 
                 p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
                 p1_next_state = torch.from_numpy(p1_next_state).float()
@@ -359,35 +377,35 @@ def train(local_model,target_model):
                         p2_reward = 100
                         p2_victories += 1
 
-                # next_originp1=p1_next_state
-                #
+
                 # p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
                 # p1_next_state = torch.from_numpy(p1_next_state).float()
                 #
                 # p2_next_state = np.reshape(p2_next_state, (1, 1, p2_next_state.shape[0], p2_next_state.shape[1]))
                 # p2_next_state = torch.from_numpy(p2_next_state).float()
-
+                #
                 # p1_reward = torch.from_numpy(np.array([p1_reward], dtype=np.float32)).unsqueeze(0)
                 # p2_reward = torch.from_numpy(np.array([p2_reward], dtype=np.float32)).unsqueeze(0)
 
 
-                player.step(old_state_p1, p1_action, p1_reward, p1_next_state, done)
-                player.step(old_state_p2, p2_action, p2_reward, p2_next_state, done)
+                brain.step(old_state_p1, p1_action, p1_reward, p1_next_state, done)
+                brain.step(old_state_p2, p2_action, p2_reward, p2_next_state, done)
 
                 old_state_p1 = p1_next_state
                 old_state_p2 = p2_next_state
 
                 if done:
-                    torch.save(player.qnetwork_local.state_dict(), 'checkpoint.pth')
+                    torch.save(brain.qnetwork_local.state_dict(), 'checkpoint.pth')
                     break
+
+            nouv_epsilon = epsilon * DECAY_RATE
+            if nouv_epsilon > ESPILON_END:
+                epsilon = nouv_epsilon
+
+            if epsilon == 0 and game_counter % 100 == 0:
+                epsilon = epsilon_temp
+
             # Update exploration rate
-
-        nouv_epsilon = epsilon*DECAY_RATE
-        if nouv_epsilon > ESPILON_END:
-            epsilon = nouv_epsilon
-
-        if epsilon==0 and game_counter%100==0 :
-            epsilon = epsilon_temp
 
 
         # model.zero_grad()
@@ -399,23 +417,23 @@ def train(local_model,target_model):
         #
 
         # # Update bak
-        p1_winrate = p1_victories / (GAME_CYCLE)
+        #p1_winrate = p1_victories / (GAME_CYCLE)
         # Display results
         if (game_counter%DISPLAY_CYCLE)==0:
 
-            # loss_string = str(loss)
-            loss_string = loss_string[7:len(loss_string)]
-            loss_value = loss_string.split(',')[0]
+            #loss_string = str(loss)
+            #loss_string = loss_string[7:len(loss_string)]
+            #loss_value = loss_string.split(',')[0]
             print("--- Match", game_counter, "---")
             print("Average duration :", float(move_counter)/float(DISPLAY_CYCLE))
-            print("Loss =", loss_value)
+            #print("Loss =", loss_value)
             print("Epsilon =", epsilon)
             print("")
             #print("Max duration :", max_du)
-            print("score p1 vs p2 =", win_p1, ":", win_p2)
-            print("ai state=", ai)
-            p1_winrate = p1_victories / (GAME_CYCLE)
-            print("mini", minnimax_match)
+            # print("score p1 vs p2 =", win_p1, ":", win_p2)
+            # print("ai state=", ai)
+            # p1_winrate = p1_victories / (GAME_CYCLE)
+            # print("mini", minnimax_match)
             #print("old", old_memory.position, "posi", len(old_memory.memory), "mem size")
             # print("new", memory.position, "posi", len(memory.memory), "mem size")
 
@@ -446,8 +464,8 @@ def train(local_model,target_model):
             # writer.add_scalar('ration_tracker', p1_winrate, game_counter)
             # writer.add_scalar('test', under_minus_26, game_counter)
 
-            with open('ais/' + folderName +'/'+ '/data.txt', 'a') as myfile:
-                myfile.write(str(game_counter) + ', ' + str(float(move_counter)/float(DISPLAY_CYCLE)) + ', ' + loss_value + '\n')
+            # with open('ais/' + folderName +'/'+ '/data.txt', 'a') as myfile:
+            #     myfile.write(str(game_counter) + ', ' + str(float(move_counter)/float(DISPLAY_CYCLE)) + ', ' + loss_value + '\n')
 
             move_counter = 0
 

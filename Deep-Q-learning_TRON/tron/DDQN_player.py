@@ -19,6 +19,8 @@ class Player(object):
     def next_position(self, current_position, direction):
         pass
 
+    def get_direction(self, current_position, direction):
+        pass
     def next_position_and_direction(self, current_position,action):
         pass
 
