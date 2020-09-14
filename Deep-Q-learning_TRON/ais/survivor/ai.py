@@ -98,9 +98,9 @@ class Ai(Player):
 		self.net = Net().to('cuda')
 		self.epsilon = epsilon
 		# Load network weights if they have been initialized already
-		if os.path.isfile('ais/' + folderName + '/_ai.bak'):
+		if os.path.isfile('ais/' + folderName + '/target_ai.bak'):
 			print("?")
-			self.net.load_state_dict(torch.load('ais/' + folderName + '/_ai.bak'))
+			self.net.load_state_dict(torch.load('ais/' + folderName + '/target_ai.bak'))
 			#print("load reussi 1 ")
 			
 		elif os.path.isfile(self.find_file('_ai.bak')):

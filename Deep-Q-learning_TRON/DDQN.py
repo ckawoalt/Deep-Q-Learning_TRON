@@ -20,7 +20,7 @@ import os
 
 # General parameters
 folderName = 'survivor'
-device = 'cpu' if torch.cuda.is_available() else 'cpu'
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Net parameters
 BATCH_SIZE = 64
@@ -30,7 +30,7 @@ GAMMA = 0.9 # Discount factor
 EPSILON_START = 1
 ESPILON_END = 0.003
 DECAY_RATE = 0.999
-TAU = 1e-3
+TAU = 0.01
 
 # Map parameters
 MAP_WIDTH = 10
@@ -64,7 +64,7 @@ class Net(nn.Module):
 
     def forward(self, x):
 
-        #x=x.cuda()
+        x=x.cuda()
 
         x = self.relu(self.conv1(x))
         x = self.relu(self.conv2(x))
@@ -75,9 +75,9 @@ class Net(nn.Module):
 
         return x
 
-class Agent(Player):
+class Agent():
     def __init__(self):
-        super(Agent, self).__init__()
+
 
         """Initialize an Agent object.
 
@@ -91,17 +91,28 @@ class Agent(Player):
         self.qnetwork_local = Net().to(device)
         self.qnetwork_target = Net().to(device)
         self.action_size=4
+        self.steps=0;
         # if os.path.isfile('ais/' + folderName  +'/'+ '_ai.bak'):
         #     self.net.load_state_dict(torch.load('ais/' + folderName +'/' + '_ai.bak'))
 
         self.optimizer = optim.Adam(self.qnetwork_local.parameters())
         self.epsilon=0
+        self.totalloss=0
         # Replay memory
         self.memory = ReplayBuffer(4, MEM_CAPACITY, BATCH_SIZE)
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
+        if os.path.isfile('ais/' + folderName + '/local_ai.bak'):
+            self.qnetwork_local.load_state_dict(torch.load('ais/' + folderName + '/local_ai.bak'))
+        if os.path.isfile('ais/' + folderName + '/target_ai.bak'):
+            self.qnetwork_target.load_state_dict(torch.load('ais/' + folderName + '/target_ai.bak'))
 
+    def get_loss(self):
+        out_loss=self.totalloss/self.steps
+        self.totalloss=0
+        self.steps=0
 
+        return out_loss
     def step(self, state, action, reward, next_step, done):
         # Save experience in replay memory
         self.memory.add(state, action, reward, next_step, done)
@@ -116,6 +127,7 @@ class Agent(Player):
 
             if len(self.memory) > BATCH_SIZE:
                 experience = self.memory.sample()
+                self.steps += 1
                 self.learn(experience, GAMMA)
 
 
@@ -145,37 +157,6 @@ class Agent(Player):
     def find_file(self, name):
         return '/'.join(self.__module__.split('.')[:-1]) + '/' + name
 
-    def get_direction(self,next_action):
-
-        if next_action == 1:
-            next_direction = Direction.UP
-        if next_action == 2:
-            next_direction = Direction.RIGHT
-        if next_action == 3:
-            next_direction = Direction.DOWN
-        if next_action == 4:
-            next_direction = Direction.LEFT
-
-        return next_direction
-
-    def next_position_and_direction(self, current_position,action):
-
-        direction = self.get_direction(action)
-        return (self.next_position(current_position, direction),direction)
-
-
-    def next_position(self, current_position, direction):
-
-        if direction == Direction.UP:
-            return (current_position[0] - 1, current_position[1])
-        if direction == Direction.RIGHT:
-            return (current_position[0], current_position[1] + 1)
-        if direction == Direction.DOWN:
-            return (current_position[0] + 1, current_position[1])
-        if direction == Direction.LEFT:
-            return (current_position[0], current_position[1] - 1)
-
-
     def learn(self, experiences, gamma):
         """Update value parameters using given batch of experience tuples.
         Params
@@ -191,9 +172,15 @@ class Agent(Player):
         # shape of output from the model (batch_size,action_dim) = (64,4)
 
         predicted_targets = self.qnetwork_local(states).gather(1, actions-1)
-
+        #################Updates for Double DQN learning###########################
+        self.qnetwork_local.eval()
         with torch.no_grad():
-            labels_next = self.qnetwork_target(next_state).detach().max(1)[0].unsqueeze(1)
+            actions_q_local = self.qnetwork_local(next_state).detach().max(1)[1].unsqueeze(1).long()
+            labels_next = self.qnetwork_target(next_state).gather(1, actions_q_local)
+        self.qnetwork_local.train()
+        ############################################################################
+        # with torch.no_grad():
+        #     labels_next = self.qnetwork_target(next_state).detach().max(1)[0].unsqueeze(1)
 
         #print("?",labels_next)
         # .detach() ->  Returns a new Tensor, detached from the current graph.
@@ -201,10 +188,7 @@ class Agent(Player):
         labels = rewards + (gamma * labels_next * (1 - dones))
 
         loss = criterion(predicted_targets, labels).to(device)
-        loss_string = str(loss)
-        loss_string = loss_string[7:len(loss_string)]
-        loss_value = loss_string.split(',')[0]
-        print("Loss =", loss_value)
+        self.totalloss += loss
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -226,6 +210,46 @@ class Agent(Player):
                                              local_model.parameters()):
             target_param.data.copy_(tau * local_param.data + (1 - tau) * target_param.data)
 
+class player(Player):
+    def __init__(self):
+        super(player, self).__init__()
+
+        """Initialize an Agent object.
+
+               Params
+               =======
+                   state_size (int): dimension of each state
+                   action_size (int): dimension of each action
+                   seed (int): random seed
+               """
+    def get_direction(self,next_action):
+
+        if next_action == 1:
+            next_direction = Direction.UP
+        if next_action == 2:
+            next_direction = Direction.RIGHT
+        if next_action == 3:
+            next_direction = Direction.DOWN
+        if next_action == 4:
+            next_direction = Direction.LEFT
+
+        return next_direction
+
+    def next_position_and_direction(self, current_position,action):
+
+        direction = self.get_direction(action)
+        return (self.next_position(current_position, direction),direction)
+
+    def next_position(self, current_position, direction):
+
+        if direction == Direction.UP:
+            return (current_position[0] - 1, current_position[1])
+        if direction == Direction.RIGHT:
+            return (current_position[0], current_position[1] + 1)
+        if direction == Direction.DOWN:
+            return (current_position[0] + 1, current_position[1])
+        if direction == Direction.LEFT:
+            return (current_position[0], current_position[1] - 1)
 
 class ReplayBuffer:
     """Fixed -size buffe to store experience tuples."""
@@ -267,14 +291,14 @@ class ReplayBuffer:
 
 
 def train(local_model,target_model):
-    # writer = SummaryWriter()
-    # vis = visdom.Visdom()
-    #
-    # vis.close(env="main")
-    # loss_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='loss_tracker', legend=['loss'], showlegend=True))
-    # du_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='duration_tracker', legend=['duration'], showlegend=True))
-    # win_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='rating_tracker', legend=['win_rate'], showlegend=True))
-    # test_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='test', legend=['test'], showlegend=True))
+    writer = SummaryWriter()
+    vis = visdom.Visdom()
+
+    vis.close(env="main")
+    loss_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='loss_tracker', legend=['loss'], showlegend=True))
+    du_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='duration_tracker', legend=['duration'], showlegend=True))
+    win_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='rating_tracker', legend=['win_rate'], showlegend=True))
+    test_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='test', legend=['test'], showlegend=True))
 
     # Initialize exploration rate
 
@@ -285,21 +309,27 @@ def train(local_model,target_model):
     game_counter = 0
     move_counter = 0
 
+
+    changeAi = 0
+
+
+    ai='basic'
+
+    # vs minimax
+
     win_p1 = 0
     win_p2 = 0
-    changeAi = 0
-    vs_min_p1_win = 0
-    minimax_game = 0
-    minnimax_match = 1000
-    minimam_match = 1000
-    Aiset = True
-    otherOpponent = True
-    ai='basic'
     rate=0
-    # Start training
+    play_with_minimax=0
+    defalt_match=1000
+    minimax_match=0
+    mini=False
+    duel_mini=True
+
+
 
     brain = Agent()
-
+    minimax=MinimaxPlayer(2,'voronoi')
     while True:
 
         # Initialize the game cycle parameters
@@ -308,14 +338,41 @@ def train(local_model,target_model):
         p2_victories = 0
         null_games = 0
 
+
+
         # Play a cycle of games
         while cycle_step < GAME_CYCLE:
             #print(cycle_step)
             # Increment the counters
             game_counter += 1
             cycle_step += 1
+            changeAi += 1
 
-            # Initialize the starting positions
+            if(game_counter<200000):
+                changeAi=0
+
+            if (changeAi > minimax_match):
+
+                if (mini):
+                    minimax_match = 11000 - minimax_match
+                    mini = False
+
+                else:
+                    duel_mini=False
+                    if not(play_with_minimax==0):
+                        rate =  win_p1 / play_with_minimax
+                    print(rate)
+                    if(rate>0.7):
+                        print("do i win?")
+                        break;
+                    minimax_match = (10000 * rate) + defalt_match
+                    mini = True
+                    play_with_minimax=0
+
+                changeAi = 0
+
+
+                # Initialize the starting positions
             x1 = random.randint(0,MAP_WIDTH-1)
             y1 = random.randint(0,MAP_HEIGHT-1)
             x2 = random.randint(0,MAP_WIDTH-1)
@@ -326,13 +383,15 @@ def train(local_model,target_model):
                 y1 = random.randint(0,MAP_HEIGHT-1)
             # Initialize the game
 
-            player1 = copy.deepcopy(brain)
-            player2 = copy.deepcopy(brain)
+            player1 = player()
+            player2 = player()
+            #
             game = Game(MAP_WIDTH,MAP_HEIGHT, [
                 PositionPlayer(1,player1, [x1, y1]),
                 PositionPlayer(2,player2, [x2, y2]),])
 
             # Get the initial state for each player
+
             old_state_p1 = game.map().state_for_player(1)
             old_state_p1 = np.reshape(old_state_p1, (1, 1, old_state_p1.shape[0], old_state_p1.shape[1]))
             old_state_p1 = torch.from_numpy(old_state_p1).float()
@@ -342,18 +401,26 @@ def train(local_model,target_model):
             old_state_p2 = torch.from_numpy(old_state_p2).float()
 
             done=False
+            move = 0
 
             while not(done):
+                brain.epsilon=epsilon
 
-               # print
-                player1 = copy.deepcopy(brain)
-                player2 = copy.deepcopy(brain)
+                if(duel_mini):
+                    p1_action = minimax.action(game.map(), 2)
+                    p2_action = minimax.action(game.map(), 2)
 
-                p1_action = player1.action(old_state_p1)
-                p2_action = player2.action(old_state_p2)
+
+                elif(mini):
+                    p1_action = brain.action(old_state_p1)
+                    p2_action = minimax.action(game.map(), 2)
+                else:
+                    p1_action = brain.action(old_state_p1)
+                    p2_action = brain.action(old_state_p2)
 
                 p1_next_state, p1_reward,p2_next_state, p2_reward,done= game.step(p1_action, p2_action)
                 move_counter += 1
+                move+=1
 
                 p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
                 p1_next_state = torch.from_numpy(p1_next_state).float()
@@ -362,6 +429,9 @@ def train(local_model,target_model):
                 p2_next_state = torch.from_numpy(p2_next_state).float()
 
                 if done:
+                    if(mini):
+                        play_with_minimax += 1
+
                     if game.winner is None:
                         null_games += 1
                         p1_reward = 0
@@ -372,20 +442,14 @@ def train(local_model,target_model):
                         p2_reward = -25
                         p1_victories +=1
 
+                        if(mini):
+                            win_p1+=1
+
+
                     else:
                         p1_reward = -25
                         p2_reward = 100
                         p2_victories += 1
-
-
-                # p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
-                # p1_next_state = torch.from_numpy(p1_next_state).float()
-                #
-                # p2_next_state = np.reshape(p2_next_state, (1, 1, p2_next_state.shape[0], p2_next_state.shape[1]))
-                # p2_next_state = torch.from_numpy(p2_next_state).float()
-                #
-                # p1_reward = torch.from_numpy(np.array([p1_reward], dtype=np.float32)).unsqueeze(0)
-                # p2_reward = torch.from_numpy(np.array([p2_reward], dtype=np.float32)).unsqueeze(0)
 
 
                 brain.step(old_state_p1, p1_action, p1_reward, p1_next_state, done)
@@ -394,74 +458,74 @@ def train(local_model,target_model):
                 old_state_p1 = p1_next_state
                 old_state_p2 = p2_next_state
 
-                if done:
-                    torch.save(brain.qnetwork_local.state_dict(), 'checkpoint.pth')
-                    break
 
-            nouv_epsilon = epsilon * DECAY_RATE
-            if nouv_epsilon > ESPILON_END:
-                epsilon = nouv_epsilon
 
-            if epsilon == 0 and game_counter % 100 == 0:
-                epsilon = epsilon_temp
+        nouv_epsilon = epsilon * DECAY_RATE
+        if nouv_epsilon > ESPILON_END:
+            epsilon = nouv_epsilon
+
+        if epsilon == 0 and game_counter % 100 == 0:
+            epsilon = epsilon_temp
 
             # Update exploration rate
 
 
-        # model.zero_grad()
-
         # Compute the loss
-        # target_q_values_batch = target_q_values_batch.detach()
-        # loss = criterion(pred_q_values_batch,target_q_values_batch)
-        # #loss=F.smooth_l1_loss(pred_q_values_batch,target_q_values_batch)
-        #
 
-        # # Update bak
+
+
         #p1_winrate = p1_victories / (GAME_CYCLE)
         # Display results
+        # Update bak
+        torch.save(brain.qnetwork_local.state_dict(), 'ais/' + folderName + '/' + 'local_ai.bak')
+        torch.save(brain.qnetwork_target.state_dict(), 'ais/' + folderName + '/' + 'target_ai.bak')
         if (game_counter%DISPLAY_CYCLE)==0:
-
-            #loss_string = str(loss)
-            #loss_string = loss_string[7:len(loss_string)]
-            #loss_value = loss_string.split(',')[0]
+            loss=brain.get_loss()
+            loss_string = str(loss)
+            loss_string = loss_string[7:len(loss_string)]
+            loss_value = loss_string.split(',')[0]
             print("--- Match", game_counter, "---")
             print("Average duration :", float(move_counter)/float(DISPLAY_CYCLE))
-            #print("Loss =", loss_value)
+            print("Loss =", loss_value)
             print("Epsilon =", epsilon)
-            print("")
-            #print("Max duration :", max_du)
+            # print("Max duration :", max_du)
             # print("score p1 vs p2 =", win_p1, ":", win_p2)
-            # print("ai state=", ai)
+            print("minimax state=", mini)
             # p1_winrate = p1_victories / (GAME_CYCLE)
-            # print("mini", minnimax_match)
-            #print("old", old_memory.position, "posi", len(old_memory.memory), "mem size")
+            print("mini", minimax_match)
+            print("")
+            # print("old", old_memory.position, "posi", len(old_memory.memory), "mem size")
             # print("new", memory.position, "posi", len(memory.memory), "mem size")
+            if not(mini):
+                p1_winrate=-1
+            else:
+                p1_winrate=win_p1/DISPLAY_CYCLE
+                win_p1=0
+            vis_loss = float(loss_value)
+            vis.line(X=torch.tensor([game_counter]),
+                     Y=torch.tensor([vis_loss]),
+                     win=loss_plot,
+                     update='append'
+                     )
+            vis.line(X=torch.tensor([game_counter]),
+                     Y=torch.tensor([float(move_counter) / float(DISPLAY_CYCLE)]),
+                     win=du_plot,
+                     update='append'
+                     )
+            vis.line(X=torch.tensor([game_counter]),
+                     Y=torch.tensor([p1_winrate]),
+                     win=win_plot,
+                     update='append'
+                     )
 
-            # vis_loss = float(loss_value)
-            # vis.line(X=torch.tensor([game_counter]),
-            #          Y=torch.tensor([vis_loss]),
-            #          win=loss_plot,
-            #          update='append'
-            #          )
-            # vis.line(X=torch.tensor([game_counter]),
-            #          Y=torch.tensor([float(move_counter) / float(DISPLAY_CYCLE)]),
-            #          win=du_plot,
-            #          update='append'
-            #          )
-            # vis.line(X=torch.tensor([game_counter]),
-            #          Y=torch.tensor([p1_winrate]),
-            #          win=win_plot,
-            #          update='append'
-            #          )
-            #
             # vis.line(X=torch.tensor([game_counter]),
             #          Y=torch.tensor([under_minus_26]),
             #          win=test_plot,
             #          update='append'
             #          )
-            # writer.add_scalar('loss_tracker', vis_loss, game_counter)
-            # writer.add_scalar('duration_tracker', (float(move_counter) / float(DISPLAY_CYCLE)), game_counter)
-            # writer.add_scalar('ration_tracker', p1_winrate, game_counter)
+            writer.add_scalar('loss_tracker', vis_loss, game_counter)
+            writer.add_scalar('duration_tracker', (float(move_counter) / float(DISPLAY_CYCLE)), game_counter)
+            writer.add_scalar('ration_tracker', p1_winrate, game_counter)
             # writer.add_scalar('test', under_minus_26, game_counter)
 
             # with open('ais/' + folderName +'/'+ '/data.txt', 'a') as myfile:

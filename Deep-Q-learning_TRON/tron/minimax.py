@@ -295,7 +295,7 @@ class MinimaxPlayer(Player):
 
     def action(self, map, id):
         self.initialize_minimax()
-        game_map = map.state_for_player(id)
+        game_map = map.state_for_player(id).T
         next_action = self.minimax.get_move(game_map)
 
         if next_action == 1:
@@ -307,4 +307,4 @@ class MinimaxPlayer(Player):
         elif next_action == 4:
             next_direction = Direction.LEFT
 
-        return next_direction
+        return next_action
