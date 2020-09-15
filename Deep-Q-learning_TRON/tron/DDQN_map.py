@@ -67,11 +67,11 @@ class Map:
         elif t == Tile.WALL:
             return -1
         elif t == Tile.PLAYER_ONE_BODY:
-            return -1
+            return -2 if p == 1 else -3
         elif t == Tile.PLAYER_ONE_HEAD:
             return 10 if p == 1 else -10
         elif t == Tile.PLAYER_TWO_BODY:
-            return -1
+            return -3 if p == 1 else -2
         elif t == Tile.PLAYER_TWO_HEAD:
             return 10 if p == 2 else -10
         else:

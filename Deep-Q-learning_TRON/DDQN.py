@@ -30,7 +30,7 @@ GAMMA = 0.9 # Discount factor
 EPSILON_START = 1
 ESPILON_END = 0.003
 DECAY_RATE = 0.999
-TAU = 0.01
+TAU = 0.001
 
 # Map parameters
 MAP_WIDTH = 10
@@ -54,17 +54,42 @@ class Net(nn.Module):
         self.conv1=nn.Conv2d(1, 32, 6)
         self.conv2 = nn.Conv2d(32, 64, 3)
 
-        self.maxPool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.dropout=nn.Dropout(p=0.2)
+        # self.conv1=nn.Conv2d(1, 8, 7,padding=3)
+        # self.conv2 = nn.Conv2d(8, 32, 5, padding=2)
+        # self.conv3 = nn.Conv2d(32, 128, 5,padding=2,stride=2)
+        #
+        # self.maxPool = nn.MaxPool2d(kernel_size=2, stride=2)
+        # self.dropout=nn.Dropout(p=0.3)
+        # self.batch_norm=nn.BatchNorm2d(1)
 
         self.relu=nn.ReLU()
 
         self.fc1 = nn.Linear(64*5*5, 256)
         self.fc2 = nn.Linear(256, 4)
 
+        # self.fc1 = nn.Linear(128*3*3, 512)
+        # self.fc2 = nn.Linear(512, 256)
+        # self.fc3 = nn.Linear(256, 64)
+        # self.fc4 = nn.Linear(64, 4)
+        #
+        # torch.nn.init.xavier_uniform_(self.fc1.weight)
+        # torch.nn.init.xavier_uniform_(self.fc2.weight)
+        # torch.nn.init.xavier_uniform_(self.fc3.weight)
+        # torch.nn.init.xavier_uniform_(self.fc4.weight)
+
     def forward(self, x):
 
+
+
         x=x.cuda()
+        # x=self.batch_norm(x)
+
+        # x = self.relu(self.conv1(x))
+        # x = self.relu(self.conv2(x))
+        # x = self.relu(self.conv3(x))
+        # x = self.maxPool(x)
+        #
+        # x = x.view(-1, 128*3*3)
 
         x = self.relu(self.conv1(x))
         x = self.relu(self.conv2(x))
@@ -72,6 +97,11 @@ class Net(nn.Module):
 
         x=self.relu(self.fc1(x))
         x = self.fc2(x)
+
+        # x = self.dropout(self.relu(self.fc1(x)))
+        # x = self.dropout(self.relu(self.fc2(x)))
+        # x = self.dropout(self.relu(self.fc3(x)))
+        # x = self.fc4(x)
 
         return x
 
@@ -120,7 +150,7 @@ class Agent():
         # Learn every UPDATE_EVERY time steps.
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         #print(len(self.memory))
-       # print(self.t_step,"step")
+        # print(self.t_step,"step")
 
         if self.t_step == 0:
             # If enough samples are available in memory, get radom subset and learn
@@ -324,7 +354,7 @@ def train(local_model,target_model):
     defalt_match=1000
     minimax_match=0
     mini=False
-    duel_mini=True
+    duel_mini=False
 
 
 
@@ -348,7 +378,7 @@ def train(local_model,target_model):
             cycle_step += 1
             changeAi += 1
 
-            if(game_counter<200000):
+            if(game_counter<2000000):
                 changeAi=0
 
             if (changeAi > minimax_match):
@@ -439,7 +469,7 @@ def train(local_model,target_model):
 
                     elif game.winner == 1:
                         p1_reward = 100
-                        p2_reward = -25
+                        p2_reward = -100
                         p1_victories +=1
 
                         if(mini):
@@ -447,7 +477,7 @@ def train(local_model,target_model):
 
 
                     else:
-                        p1_reward = -25
+                        p1_reward = -100
                         p2_reward = 100
                         p2_victories += 1
 
