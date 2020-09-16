@@ -26,6 +26,11 @@ def conv7x7(in_planes, out_planes, stride=1):
     return nn.Conv2d(in_planes, out_planes, kernel_size=7, stride=stride,
                      padding=3, bias=False)
 
+def conv5x5(in_planes, out_planes, stride=1):
+    """3x3 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=5, stride=stride,
+                     padding=2, bias=False)
+
 def conv1x1(in_planes, out_planes, stride=1):
     """1x1 convolution"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
@@ -36,10 +41,10 @@ class BasicBlock(nn.Module):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(BasicBlock, self).__init__()
-        self.conv1 = conv7x7(inplanes, planes, stride)
+        self.conv1 = conv5x5(inplanes, planes, stride)
         self.bn1 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv7x7(planes, planes)
+        self.conv2 = conv5x5(planes, planes)
         self.bn2 = nn.BatchNorm2d(planes)
         self.downsample = downsample
         self.stride = stride

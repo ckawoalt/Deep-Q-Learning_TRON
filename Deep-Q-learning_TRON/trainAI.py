@@ -4,6 +4,7 @@ from tron.window import Window
 from collections import namedtuple
 from torch.utils.tensorboard import SummaryWriter
 from tron.minimax import MinimaxPlayer
+from tron import resnet
 
 import torch
 import torch.nn as nn
@@ -23,6 +24,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # Net parameters
 BATCH_SIZE = 128
 GAMMA = 0.9 # Discount factor
+conv1x1=resnet.conv1x1
 
 # Exploration parameters
 EPSILON_START = 1
@@ -42,74 +44,91 @@ DISPLAY_CYCLE = GAME_CYCLE
 
 
 class Net(nn.Module):
-
 	def __init__(self):
 		super(Net, self).__init__()
 		self.batch_size = BATCH_SIZE
 		self.gamma = GAMMA
-		# self.conv1=nn.Conv2d(1, 8, 7,padding=3)
-		# self.conv2 = nn.Conv2d(8, 32, 5, padding=2)
-		# self.conv3 = nn.Conv2d(32, 128, 5,padding=2,stride=2)
-		# self.conv4 = nn.Conv2d(128, 256, 3, padding=1)
+		self.inplanes = 1
+		self.layers = 1
 
-		self.conv1=nn.Conv2d(1, 32, 6)
-		self.conv2 = nn.Conv2d(32, 64, 3)
+		# self.conv1 = nn.Conv2d(1, 8, 5,padding=2)
+		# self.conv2 = nn.Conv2d(8, 32, 3,padding=1)
+		# self.conv3 = nn.Conv2d(32, 64, 3,padding=1)
 
+		# self.layer1=self._make_layer(BasicBlock,8,self.layers,stride=2)
+		# self.layer2 = self._make_layer(BasicBlock, 64, self.layers)
+		# self.layer3 = self._make_layer(BasicBlock, 128, self.layers)
+		self.conv1 = nn.Conv2d(1, 8, 7, padding=3, stride=2)
+		self.conv2 = nn.Conv2d(8, 32, 5, padding=2, stride=2)
+		self.conv3 = nn.Conv2d(32, 64, 5, padding=2)
+		self.conv4 = nn.Conv2d(64, 256, 3, padding=1)
 
+		# self.conv1=nn.Conv2d(1, 32, 6)
+		# self.conv2 = nn.Conv2d(32, 64, 3)
 
-		self.maxPool = nn.MaxPool2d(kernel_size=2, stride=2)
-		self.dropout=nn.Dropout(p=0.2)
-		#self.batchnorm=nn.BatchNorm2d(1)
-
-		self.relu=nn.ReLU()
-		# self.fc1 = nn.Linear(128 * 1 * 1, 256)
-		# self.fc1 = nn.Linear(512, 1024)
+		self.fc1 = nn.Linear(256 * 1 * 1, 256)
 		# self.fc2 = nn.Linear(256, 512)
 		# self.fc3 = nn.Linear(512, 256)
-		# self.fc4 = nn.Linear(256, 64)
-		# self.fc5 = nn.Linear(64, 4)
+		self.fc4 = nn.Linear(256, 64)
+		self.fc5 = nn.Linear(64, 4)
 
-		self.fc1 = nn.Linear(64*5*5, 256)
-		self.fc2 = nn.Linear(256, 4)
+		self.maxPool = nn.MaxPool2d(kernel_size=3, stride=1)
 
-		# torch.nn.init.xavier_uniform_(self.fc0.weight)
-		# torch.nn.init.xavier_uniform_(self.fc1.weight)
+		self.dropout = nn.Dropout(p=0.2)
+
+		self.batch_norm = nn.BatchNorm2d(1)
+		torch.nn.init.xavier_uniform_(self.fc1.weight)
 		# torch.nn.init.xavier_uniform_(self.fc2.weight)
 		# torch.nn.init.xavier_uniform_(self.fc3.weight)
-		# torch.nn.init.xavier_uniform_(self.fc4.weight)
-		# torch.nn.init.xavier_uniform_(self.fc5.weight)
+		torch.nn.init.xavier_uniform_(self.fc4.weight)
+		torch.nn.init.xavier_uniform_(self.fc5.weight)
 
 	def forward(self, x):
+		x = x.cuda()
 
-		x=x.cuda()
+		x = self.batch_norm(x)
+		#
+		# x = self.layer1(x)
+		# x = self.layer2(x)
+		# x = self.AvgPool(x)
+		# x = self.layer3(x)
+		# x = self.AvgPool(x)
 
-		# id = x
-		# x=self.batchnorm(x)
-		# x = self.relu(self.conv1(x))
-		# x = self.conv2(x)
-		# x=x+id
-		# self.relu(x)
-		# x = self.relu(self.conv3(x))
-		# x = self.maxPool(x)
+		x = F.relu(self.conv1(x))
+		x = F.relu(self.conv2(x))
+		x = F.relu(self.conv3(x))
+		x = F.relu(self.conv4(x))
+		x = self.maxPool(x)
 
-		# x = x.view(-1, 128*1*1)
+		x = x.view(-1, 256 * 1 * 1)
 
-		x = self.relu(self.conv1(x))
-		x = self.relu(self.conv2(x))
-		x = x.view(-1, 64 * 5 * 5)
-
-		# x = self.dropout(self.relu(self.fc0(x)))
-		# x = self.dropout(self.relu(self.fc1(x)))
-		# x = self.dropout(self.relu(self.fc2(x)))
-		# x = self.dropout(self.relu(self.fc3(x)))
-		# x = self.dropout(self.relu(self.fc4(x)))
-		# x = self.fc5(x)
-
-		x=self.relu(self.fc1(x))
-		x = self.fc2(x)
-
+		x = self.dropout(F.relu(self.fc1(x)))
+		# x = self.dropout(F.relu(self.fc2(x)))
+		# x = self.dropout(F.relu(self.fc3(x)))
+		x = self.dropout(F.relu(self.fc4(x)))
+		x = self.fc5(x)
 
 		return x
+
+	def _make_layer(self, block, planes, blocks, stride=1):
+		downsample = None
+
+		if stride != 1 or self.inplanes != planes * block.expansion:
+			downsample = nn.Sequential(
+				conv1x1(self.inplanes, planes * block.expansion, stride),
+				nn.BatchNorm2d(planes * block.expansion),
+			)
+
+		layers = []
+
+		layers.append(block(self.inplanes, planes, stride, downsample))
+
+		self.inplanes = planes * block.expansion
+
+		for _ in range(1, blocks):
+			layers.append(block(self.inplanes, planes))
+
+		return nn.Sequential(*layers)
 
 
 class Ai(Player):
