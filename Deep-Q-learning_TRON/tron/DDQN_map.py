@@ -77,6 +77,7 @@ class Map:
         else:
             return None
 
+
     def state_for_player(self, p):
 
 

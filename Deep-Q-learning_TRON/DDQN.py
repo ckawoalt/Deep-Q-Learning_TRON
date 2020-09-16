@@ -51,7 +51,7 @@ class Net(nn.Module):
         self.batch_size = BATCH_SIZE
         self.gamma = GAMMA
 
-        self.conv1=nn.Conv2d(1, 32, 6)
+        self.conv1=nn.Conv2d(3, 32, 6)
         self.conv2 = nn.Conv2d(32, 64, 3)
 
         # self.conv1=nn.Conv2d(1, 8, 7,padding=3)
@@ -132,6 +132,7 @@ class Agent():
         self.memory = ReplayBuffer(4, MEM_CAPACITY, BATCH_SIZE)
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
+
         if os.path.isfile('ais/' + folderName + '/local_ai.bak'):
             self.qnetwork_local.load_state_dict(torch.load('ais/' + folderName + '/local_ai.bak'))
         if os.path.isfile('ais/' + folderName + '/target_ai.bak'):
@@ -320,7 +321,32 @@ class ReplayBuffer:
         return len(self.memory)
 
 
-def train(local_model,target_model):
+def pop_up(map):
+    my=np.zeros((map.shape[0],map.shape[1]))
+    ener=np.zeros((map.shape[0],map.shape[1]))
+    wall=np.zeros((map.shape[0],map.shape[1]))
+
+    for i in range(len(map[0])):
+        for j in range(len(map[1])):
+
+            if(map[i][j]==-1):
+                wall[i][j]=1
+            elif (map[i][j] == -2):
+                my[i][j] = 1
+            elif (map[i][j] == -3):
+                ener[i][j] = 1
+            elif (map[i][j] == -10):
+                ener[i][j] = 10
+            elif (map[i][j] == 10):
+                my[i][j] = 10
+    wall=wall.reshape(1,wall.shape[0],wall.shape[1])
+    ener = ener.reshape(1, ener.shape[0], ener.shape[1])
+    my = my.reshape(1, my.shape[0], my.shape[1])
+
+    return np.concatenate((wall,my,ener),axis=0)
+
+
+def train():
     writer = SummaryWriter()
     vis = visdom.Visdom()
 
@@ -355,6 +381,7 @@ def train(local_model,target_model):
     minimax_match=0
     mini=False
     duel_mini=False
+    start_mini=100000
 
 
 
@@ -378,8 +405,9 @@ def train(local_model,target_model):
             cycle_step += 1
             changeAi += 1
 
-            if(game_counter<2000000):
+            if(game_counter<start_mini):
                 changeAi=0
+
 
             if (changeAi > minimax_match):
 
@@ -423,12 +451,22 @@ def train(local_model,target_model):
             # Get the initial state for each player
 
             old_state_p1 = game.map().state_for_player(1)
-            old_state_p1 = np.reshape(old_state_p1, (1, 1, old_state_p1.shape[0], old_state_p1.shape[1]))
+            old_state_p1 = pop_up(old_state_p1)
+            old_state_p1 = np.reshape(old_state_p1, (1, -1, old_state_p1.shape[1], old_state_p1.shape[2]))
             old_state_p1 = torch.from_numpy(old_state_p1).float()
 
+            # old_state_p1 = game.map().state_for_player(1)
+            # old_state_p1 = np.reshape(old_state_p1, (1, 1, old_state_p1.shape[0], old_state_p1.shape[1]))
+            # old_state_p1 = torch.from_numpy(old_state_p1).float()
+
             old_state_p2 = game.map().state_for_player(2)
-            old_state_p2 = np.reshape(old_state_p2, (1, 1, old_state_p2.shape[0], old_state_p2.shape[1]))
+            old_state_p2=pop_up(old_state_p2)
+            old_state_p2 = np.reshape(old_state_p2, (1, -1, old_state_p2.shape[1], old_state_p2.shape[2]))
             old_state_p2 = torch.from_numpy(old_state_p2).float()
+
+            # old_state_p2 = game.map().state_for_player(2)
+            # old_state_p2 = np.reshape(old_state_p2, (1, 1, old_state_p2.shape[0], old_state_p2.shape[1]))
+            # old_state_p2 = torch.from_numpy(old_state_p2).float()
 
             done=False
             move = 0
@@ -452,11 +490,19 @@ def train(local_model,target_model):
                 move_counter += 1
                 move+=1
 
-                p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
+                p1_next_state=pop_up(p1_next_state)
+                p1_next_state = np.reshape(p1_next_state, (1, -1, p1_next_state.shape[1], p1_next_state.shape[2]))
                 p1_next_state = torch.from_numpy(p1_next_state).float()
 
-                p2_next_state = np.reshape(p2_next_state, (1, 1, p2_next_state.shape[0], p2_next_state.shape[1]))
+                p2_next_state = pop_up(p2_next_state)
+                p2_next_state = np.reshape(p2_next_state, (1, -1, p2_next_state.shape[1], p2_next_state.shape[2]))
                 p2_next_state = torch.from_numpy(p2_next_state).float()
+
+                # p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
+                # p1_next_state = torch.from_numpy(p1_next_state).float()
+                #
+                # p2_next_state = np.reshape(p2_next_state, (1, 1, p2_next_state.shape[0], p2_next_state.shape[1]))
+                # p2_next_state = torch.from_numpy(p2_next_state).float()
 
                 if done:
                     if(mini):
@@ -509,6 +555,10 @@ def train(local_model,target_model):
         # Update bak
         torch.save(brain.qnetwork_local.state_dict(), 'ais/' + folderName + '/' + 'local_ai.bak')
         torch.save(brain.qnetwork_target.state_dict(), 'ais/' + folderName + '/' + 'target_ai.bak')
+        if(game_counter==start_mini):
+            torch.save(brain.qnetwork_local.state_dict(), 'ais/' + folderName + '/' + 'local_ai_200k.bak')
+            torch.save(brain.qnetwork_target.state_dict(), 'ais/' + folderName + '/' + 'target_ai_200k.bak')
+
         if (game_counter%DISPLAY_CYCLE)==0:
             loss=brain.get_loss()
             loss_string = str(loss)
@@ -572,7 +622,7 @@ def main():
 
     # if os.path.isfile('ais/' + folderName + '/_ai.bak'):
     #     local_model.load_state_dict(torch.load('ais/' + folderName + '/_ai.bak'))
-    train(local_model,target_model)
+    train()
 
 if __name__ == "__main__":
     main()
