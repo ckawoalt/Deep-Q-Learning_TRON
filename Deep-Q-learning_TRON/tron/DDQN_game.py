@@ -115,7 +115,7 @@ class Game:
 
         alive_count = 0
         alive = None
-        self.reword += 1
+        self.reword = 10
 
 
 

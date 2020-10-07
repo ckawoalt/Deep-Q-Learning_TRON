@@ -15,6 +15,7 @@ NUM_EPISODES = 1000  # 최대 에피소드 수
 
 NUM_PROCESSES = 32  # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 5  # 총 보상을 계산할 때 Advantage 학습을 할 단계 수
+
 # A2C 손실함수 계산에 사용되는 상수
 value_loss_coef = 0.5
 entropy_coef = 0.01
@@ -37,6 +38,7 @@ class RolloutStorage(object):
     def insert(self, current_obs, action, reward, mask):
         '''현재 인덱스 위치에 transition을 저장'''
         self.observations[self.index + 1].copy_(current_obs)
+
         self.masks[self.index + 1].copy_(mask)
         self.rewards[self.index].copy_(reward)
         self.actions[self.index].copy_(action)
@@ -53,6 +55,7 @@ class RolloutStorage(object):
 
         # 주의 : 5번째 단계부터 거슬러 올라오며 계산
         # 주의 : 5번째 단계가 Advantage1, 4번째 단계는 Advantage2가 됨
+
         self.returns[-1] = next_value
         for ad_step in reversed(range(self.rewards.size(0))):
             self.returns[ad_step] = self.returns[ad_step + 1] * \
@@ -71,7 +74,9 @@ class Net(nn.Module):
         '''신경망 순전파 계산을 정의'''
         h1 = F.relu(self.fc1(x))
         h2 = F.relu(self.fc2(h1))
+
         critic_output = self.critic(h2)  # 상태가치 계산
+
         actor_output = self.actor(h2)  # 행동 계산
 
         return critic_output, actor_output
@@ -142,8 +147,7 @@ class Brain(object):
         # detach 메서드를 호출하여 advantages를 상수로 취급
 
         # 오차함수의 총합
-        total_loss = (value_loss * value_loss_coef -
-                      action_gain - entropy * entropy_coef)
+        total_loss = (value_loss * value_loss_coef -action_gain - entropy * entropy_coef)
 
         # 결합 가중치 수정
         self.actor_critic.train()  # 신경망을 학습 모드로 전환
@@ -170,15 +174,17 @@ class Environment:
         n_in = envs[0].observation_space.shape[0]  # 상태 변수 수는 4
         n_out = envs[0].action_space.n  # 행동 가짓수는 2
         n_mid = 32
+
         actor_critic = Net(n_in, n_mid, n_out)  # 신경망 객체 생성
         global_brain = Brain(actor_critic)
 
         # 각종 정보를 저장하는 변수
         obs_shape = n_in
-        current_obs = torch.zeros(
-            NUM_PROCESSES, obs_shape)  # torch.Size([16, 4])
-        rollouts = RolloutStorage(
-            NUM_ADVANCED_STEP, NUM_PROCESSES, obs_shape)  # rollouts 객체
+
+        current_obs = torch.zeros(NUM_PROCESSES, obs_shape)  # torch.Size([16, 4])
+
+        rollouts = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES, obs_shape)  # rollouts 객체
+
         episode_rewards = torch.zeros([NUM_PROCESSES, 1])  # 현재 에피소드의 보상
         final_rewards = torch.zeros([NUM_PROCESSES, 1])  # 마지막 에피소드의 보상
         obs_np = np.zeros([NUM_PROCESSES, obs_shape])  # Numpy 배열
@@ -189,8 +195,10 @@ class Environment:
 
         # 초기 상태로부터 시작
         obs = [envs[i].reset() for i in range(NUM_PROCESSES)]
+
         obs = np.array(obs)
-        obs = torch.from_numpy(obs).float()  # torch.Size([16, 4])
+        obs = torch.from_numpy(obs).float()  # torch.Size([32, 4])
+
         current_obs = obs  # 가장 최근의 obs를 저장
 
         # advanced 학습에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
@@ -205,21 +213,22 @@ class Environment:
                 with torch.no_grad():
                     action = actor_critic.act(rollouts.observations[step])
 
-                # (16,1)→(16,) -> tensor를 NumPy변수로
+                # (32,1)→(16,) -> tensor를 NumPy변수로
+
                 actions = action.squeeze(1).numpy()
 
                 # 한 단계를 실행
+
                 for i in range(NUM_PROCESSES):
-                    obs_np[i], reward_np[i], done_np[i], _ = envs[i].step(
-                        actions[i])
+                    obs_np[i], reward_np[i], done_np[i], _ = envs[i].step(actions[i])
+
 
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:  # 단계 수가 200을 넘거나, 봉이 일정 각도 이상 기울면 done이 True가 됨
 
                         # 환경 0일 경우에만 출력
                         if i == 0:
-                            print('%d Episode: Finished after %d steps' % (
-                                episode, each_step[i] + 1))
+                            print('%d Episode: Finished after %d steps' % (episode, each_step[i] + 1))
                             episode += 1
 
                         # 보상 부여
