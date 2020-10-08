@@ -34,8 +34,9 @@ max_grad_norm = 0.5
 MAP_WIDTH = 10
 MAP_HEIGHT = 10
 
-SHOW_ITER=20
+SHOW_ITER=100
 minimax = MinimaxPlayer(2, 'voronoi')
+
 class RolloutStorage(object):
     '''Advantage 학습에 사용할 메모리 클래스'''
 
@@ -281,7 +282,15 @@ def make_game():
 
 def train():
     '''실행 엔트리 포인트'''
+    total_loss_sum2 = 0
+    val_loss_sum2 = 0
+    entropy_sum2 = 0
+    act_loss_sum2 = 0
 
+    total_loss_sum1 = 0
+    val_loss_sum1 = 0
+    entropy_sum1 = 0
+    act_loss_sum1 = 0
     # 동시 실행할 환경 수 만큼 env를 생성
     envs = [make_game() for i in range(NUM_PROCESSES)]
 
@@ -349,17 +358,17 @@ def train():
             # 한 단계를 실행
 
             for i in range(NUM_PROCESSES):
-                if (i == 0):
-                    action1[i] = minimax.action(envs[i].map(), 1)
-                    action2[i] = minimax.action(envs[i].map(), 2)
+                # if (i == 0):
+                #     action1[i] = minimax.action(envs[i].map(), 1)
+                #     action2[i] = minimax.action(envs[i].map(), 2)
                 # print(actions1[i])
                 # print(actions2[i])
                 # print(envs[i].map().state_for_player(1))
                 # print(envs[i].map().state_for_player(2))
                 # print(obs_np2[i])
                 obs_np1[i], reward_np1[i],obs_np2[i], reward_np2[i], done_np[i] = envs[i].step(actions1[i],actions2[i])
-                print(obs_np1[i])
-                print(obs_np2[i])
+                # print(obs_np1[i])
+                # print(obs_np2[i])
                 each_step1[i] += 1
                 each_step2[i] += 1
 
@@ -367,23 +376,23 @@ def train():
 
                     if envs[i].winner is None:
 
-                        reward_np1[i]=-10.0
-                        reward_np2[i]=-10.0
+                        reward_np1[i]=0.0
+                        reward_np2[i]=0.0
 
                     elif envs[i].winner == 1:
 
-                        reward_np1[i] = 50.0
-                        reward_np2[i] = -50.0
+                        reward_np1[i] = 1.0
+                        reward_np2[i] = -1.0
                     else:
-                        reward_np1[i] = -50.0
-                        reward_np2[i] = 50.0
+                        reward_np1[i] = -1.0
+                        reward_np2[i] = 1.0
                     envs[i]=make_game()
 
-                    if (i == 0):
-                        gamecount += 1
-                        if(gamecount%SHOW_ITER!=0):
-                            print(reward_np1[i], "reward")
-                            print(each_step1[i], "step")
+                    # if (i == 0):
+                    #     gamecount += 1
+                    #     if(gamecount%SHOW_ITER!=0):
+                    #         print(reward_np1[i], "reward")
+                    #         print(each_step1[i], "step")
 
                     obs_np1[i] = envs[i].map().state_for_player(1)
                     obs_np2[i] = envs[i].map().state_for_player(2)
@@ -406,10 +415,12 @@ def train():
 
 
             # current_obs를 업데이트
-            obs1 = [torch.from_numpy(pop_up(obs_np1[i])).float() for i in range(NUM_PROCESSES)]
-            obs2 = [torch.from_numpy(pop_up(obs_np2[i])).float() for i in range(NUM_PROCESSES)]
+            obs1 = [pop_up(obs_np1[i]) for i in range(NUM_PROCESSES)]
+            obs2 = [pop_up(obs_np2[i]) for i in range(NUM_PROCESSES)]
             # obs1 = torch.from_numpy(pop_up(obs_np1)).float()
             # obs2 = torch.from_numpy(pop_up(obs_np2)).float()
+            obs1=torch.tensor(np.array(obs1))
+            obs2 = torch.tensor(np.array(obs2))
             current_obs1 = obs1  # 최신 상태의 obs를 저장
             current_obs2 = obs2  # 최신 상태의 obs를 저장
 
@@ -423,30 +434,51 @@ def train():
 
         with torch.no_grad():
             next_value1 = actor_critic.get_value(rollouts1.observations[-1]).detach()
-            next_value2 = actor_critic.get_value(rollouts2.observations[-1]).detach()
+            # next_value2 = actor_critic.get_value(rollouts2.observations[-1]).detach()
             # rollouts.observations의 크기는 torch.Size([6, 32, 4])
 
         # 모든 단계의 할인총보상을 계산하고, rollouts의 변수 returns를 업데이트
         rollouts1.compute_returns(next_value1)
-        rollouts2.compute_returns(next_value2)
+        # rollouts2.compute_returns(next_value2)
 
         # 신경망 및 rollout 업데이트
         loss1,val1,act1,entro1=global_brain.update(rollouts1)
-        loss2,val2,act2,entro2=global_brain.update(rollouts2)
+        # loss2,val2,act2,entro2=global_brain.update(rollouts2)
         losscount+=1
 
-        # if(losscount%SHOW_ITER==0):
-        #     print(loss1,":total1")
-        #     print(val1, ":val1")
-        #     print(act1, ":act1")
-        #     print(entro1, ":entropy1",end="\n\n")
-        #     print(loss2, ":total2")
-        #     print(val2, ":val2")
-        #     print(act2, ":act2")
-        #     print(entro2, ":entropy2",end="\n\n")
-        rollouts1.after_update()
-        rollouts2.after_update()
+        act_loss_sum1+=act1
+        entropy_sum1+=entro1
+        val_loss_sum1+=val1
+        total_loss_sum1+=loss1
+        #
+        # act_loss_sum2 += act2
+        # entropy_sum2 += entro2
+        # val_loss_sum2 += val2
+        # total_loss_sum2 += loss2
 
+        if(losscount%SHOW_ITER==0):
+            print(total_loss_sum1/SHOW_ITER,":total1")
+            print(val_loss_sum1/SHOW_ITER, ":val1")
+            print(act_loss_sum1/SHOW_ITER, ":act1")
+            print(entropy_sum1/SHOW_ITER, ":entropy1",end="\n\n")
+
+            # print(total_loss_sum2/SHOW_ITER, ":total2")
+            # print(val_loss_sum2/SHOW_ITER, ":val2")
+            # print(act_loss_sum2/SHOW_ITER, ":act2")
+            # print(entropy_sum2/SHOW_ITER, ":entropy2",end="\n\n")
+
+            act_loss_sum1 =0
+            entropy_sum1 =0
+            val_loss_sum1 =0
+            total_loss_sum1 =0
+
+            # act_loss_sum2 =0
+            # entropy_sum2 =0
+            # val_loss_sum2 =0
+            # total_loss_sum2 =0
+
+        rollouts1.after_update()
+        # rollouts2.after_update()
 
 
 # main 실행
