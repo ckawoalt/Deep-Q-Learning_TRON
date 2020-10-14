@@ -14,6 +14,7 @@ from tron.DDQN_game import Tile, Game, PositionPlayer
 from torch.utils.tensorboard import SummaryWriter
 from tron.minimax import MinimaxPlayer
 from tron import resnet
+from time import sleep
 
 
 
@@ -23,8 +24,12 @@ GAMMA = 0.99  # 시간할인율
 MAX_STEPS = 200  # 1에피소드 당 최대 단계 수
 NUM_EPISODES = 1000  # 최대 에피소드 수
 
+lr = 7e-4
+eps = 1e-5
+alpha = 0.99
+
 NUM_PROCESSES = 32  # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 1  # 총 보상을 계산할 때 Advantage 학습을 할 단계 수
+NUM_ADVANCED_STEP = 1 # 총 보상을 계산할 때 Advantage 학습을 할 단계 수
 
 # A2C 손실함수 계산에 사용되는 상수
 value_loss_coef = 0.5
@@ -73,6 +78,7 @@ class RolloutStorage(object):
         # 주의 : 5번째 단계가 Advantage1, 4번째 단계는 Advantage2가 됨
 
         self.returns[-1] = next_value
+
         for ad_step in reversed(range(self.rewards.size(0))):
             self.returns[ad_step] = self.returns[ad_step + 1] * GAMMA * self.masks[ad_step + 1] + self.rewards[ad_step]
 
@@ -80,26 +86,49 @@ class Net(nn.Module):
 
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 32, 6)
-        self.conv2 = nn.Conv2d(32, 64, 3)
+        self.conv1 = nn.Conv2d(3, 32, 5)
+        self.conv2 = nn.Conv2d(32, 64, 5)
 
-        self.fc1 = nn.Linear(64 * 5 * 5, 64)
+        self.fc1 = nn.Linear(64 * 4 * 4, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 64)
+
         self.dropout = nn.Dropout(p=0.3)
-        self.actor = nn.Linear(64, 4)  # 행동을 결정하는 부분이므로 출력 갯수는 행동의 가짓수
-        self.critic = nn.Linear(64, 1)  # 상태가치를 출력하는 부분이므로 출력 갯수는 1개
+        self.actor1 = nn.Linear(64, 64)
+        self.actor2 = nn.Linear(64, 4)  # 행동을 결정하는 부분이므로 출력 갯수는 행동의 가짓수
+
+        self.critic1 = nn.Linear(64, 64)
+        self.critic2 = nn.Linear(64, 1)  # 상태가치를 출력하는 부분이므로 출력 갯수는 1개
+        self.batch_norm = nn.BatchNorm2d(3)
+
+        torch.nn.init.xavier_uniform_(self.fc1.weight)
+        torch.nn.init.xavier_uniform_(self.fc2.weight)
+        torch.nn.init.xavier_uniform_(self.fc2.weight)
+        torch.nn.init.xavier_uniform_(self.actor1.weight)
+        torch.nn.init.xavier_uniform_(self.critic1.weight)
+
+        torch.nn.init.xavier_uniform_(self.actor2.weight)
+        torch.nn.init.xavier_uniform_(self.critic2.weight)
+
 
     def forward(self, x):
         '''신경망 순전파 계산을 정의'''
 
+        x=self.batch_norm(x)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
-        x = x.view(-1, 64 * 5 * 5)
+        x = x.view(-1, 64 * 4 * 4)
 
 
         x = self.dropout(F.relu(self.fc1(x)))
+        x = self.dropout(F.relu(self.fc2(x)))
+        x = self.dropout(F.relu(self.fc3(x)))
 
-        actor_output =self.actor(x)
-        critic_output = self.critic(x)
+        h1 = self.dropout(F.relu(self.actor1(x)))
+        actor_output =self.actor2(h1)
+
+        h2=self.dropout(F.relu(self.critic1(x)))
+        critic_output = self.critic2(h2)
 
 
         return critic_output, actor_output
@@ -177,7 +206,7 @@ class player(Player):
 class Brain(object):
     def __init__(self, actor_critic):
         self.actor_critic = actor_critic  # actor_critic은 Net 클래스로 구현한 신경망
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.01)
+        self.optimizer = optim.RMSprop(self.actor_critic.parameters(), lr=lr, eps=eps, alpha=alpha)
 
     def update(self, rollouts):
         '''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
@@ -200,6 +229,10 @@ class Brain(object):
         action_log_probs = action_log_probs.view(num_steps, num_processes, 1) # torch.Size([160, 1]) ->([5, 32, 1])
 
         # advantage(행동가치-상태가치) 계산
+        # print(rollouts.returns[:-1])
+        # print(values)
+        # print("?@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        # sleep(5)
         advantages = rollouts.returns[:-1] - values  # torch.Size([5, 32, 1])
 
         # Critic의 loss 계산
@@ -223,7 +256,7 @@ class Brain(object):
         self.optimizer.zero_grad()  # 경사를 초기화
         total_loss.backward()  # 역전파 계산
 
-        # nn.utils.clip_grad_norm_(self.actor_critic.parameters(), max_grad_norm)
+        nn.utils.clip_grad_norm_(self.actor_critic.parameters(), max_grad_norm)
         # 결합 가중치가 한번에 너무 크게 변화하지 않도록, 경사를 0.5 이하로 제한함(클리핑)
 
         self.optimizer.step()  # 결합 가중치 수정
@@ -291,7 +324,18 @@ def train():
     val_loss_sum1 = 0
     entropy_sum1 = 0
     act_loss_sum1 = 0
+
+    vis = visdom.Visdom()
+    vis.close(env="main")
     # 동시 실행할 환경 수 만큼 env를 생성
+    total_loss_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='total_tracker', legend=['loss'], showlegend=True))
+    act_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='act_tracker', legend=['act'], showlegend=True))
+    entropy_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='entropy_tracker', legend=['entropy'], showlegend=True))
+    value_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='value_tracker', legend=['value'], showlegend=True))
+
+    duration_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='duration', legend=['duration'], showlegend=True))
+
+
     envs = [make_game() for i in range(NUM_PROCESSES)]
 
 
@@ -308,12 +352,14 @@ def train():
     episode_rewards1 = torch.zeros([NUM_PROCESSES, 1])  # 현재 에피소드의 보상
     obs_np1 = np.zeros([NUM_PROCESSES,12,12])  # Numpy 배열 # 게임 상황이 12x12임
     reward_np1 = np.zeros([NUM_PROCESSES, 1])  # Numpy 배열
+    save_reward1 = np.zeros([NUM_PROCESSES])
     each_step1 = np.zeros(NUM_PROCESSES)  # 각 환경의 단계 수를 기록
 
     rollouts2 = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES)  # rollouts 객체
     episode_rewards2 = torch.zeros([NUM_PROCESSES, 1])  # 현재 에피소드의 보상
     obs_np2 = np.zeros([NUM_PROCESSES,12, 12])  # Numpy 배열 # 게임 상황이 12x12임
     reward_np2 = np.zeros([NUM_PROCESSES, 1])  # Numpy 배열
+    save_reward2 = np.zeros([NUM_PROCESSES])
     each_step2 = np.zeros(NUM_PROCESSES)  # 각 환경의 단계 수를 기록
 
     episode = 0  # 환경 0의 에피소드 수
@@ -340,6 +386,7 @@ def train():
     rollouts2.observations[0].copy_(current_obs2)
     gamecount=0
     losscount=0
+    duration=0
     # 1 에피소드에 해당하는 반복문
     while(True):  # 전체 for문
         # advanced 학습 대상이 되는 각 단계에 대해 계산
@@ -368,6 +415,11 @@ def train():
                 # print(obs_np2[i])
                 obs_np1[i], reward_np1[i],obs_np2[i], reward_np2[i], done_np[i] = envs[i].step(actions1[i],actions2[i])
                 # print(obs_np1[i])
+                # if(gamecount>10000):
+                #     if(i==0):
+                #         sleep(3)
+                #         print(action1[i])
+                #         print(obs_np1[i])
                 # print(obs_np2[i])
                 each_step1[i] += 1
                 each_step2[i] += 1
@@ -381,26 +433,40 @@ def train():
 
                     elif envs[i].winner == 1:
 
-                        reward_np1[i] = 1.0
-                        reward_np2[i] = -1.0
+                        reward_np1[i] = 100.0
+                        reward_np2[i] = -100.0
                     else:
-                        reward_np1[i] = -1.0
-                        reward_np2[i] = 1.0
+                        reward_np1[i] = -100.0
+                        reward_np2[i] = 100.0
                     envs[i]=make_game()
 
-                    # if (i == 0):
-                    #     gamecount += 1
-                    #     if(gamecount%SHOW_ITER!=0):
-                    #         print(reward_np1[i], "reward")
-                    #         print(each_step1[i], "step")
+                    if(i==0):
+                        gamecount += 1
+                        duration += each_step1[i]
+
+                    if (i == 0):
+                        if(gamecount%SHOW_ITER==0):
+
+                            vis.line(X=torch.tensor([gamecount]),
+                                     Y=torch.tensor([duration/SHOW_ITER]),
+                                     win=duration_plot,
+                                     update='append'
+                                     )
+                            duration=0
+                        # print(reward_np1[i], "reward")
+                        # print(each_step1[i], "step")
 
                     obs_np1[i] = envs[i].map().state_for_player(1)
                     obs_np2[i] = envs[i].map().state_for_player(2)
                     each_step1[i]=0
                     each_step2[i]=0
+                    save_reward1[i] = 0.0;
+                    save_reward2[i] = 0.0;
                 else:
-                    reward_np1[i] = 0.0  # 그 외의 경우는 보상 0 부여
-                    reward_np2[i] = 0.0
+                    save_reward1[i] += 1.0;
+                    save_reward2[i] += 1.0;
+                    reward_np1[i] = save_reward1[i] # 그 외의 경우는 보상 0 부여
+                    reward_np2[i] = save_reward2[i]
 
 
             # 보상을 tensor로 변환하고, 에피소드의 총보상에 더해줌
@@ -457,16 +523,41 @@ def train():
         # total_loss_sum2 += loss2
 
         if(losscount%SHOW_ITER==0):
-            print(total_loss_sum1/SHOW_ITER,":total1")
-            print(val_loss_sum1/SHOW_ITER, ":val1")
-            print(act_loss_sum1/SHOW_ITER, ":act1")
-            print(entropy_sum1/SHOW_ITER, ":entropy1",end="\n\n")
+            total_loss_sum1 =total_loss_sum1 / SHOW_ITER
+            val_loss_sum1=val_loss_sum1 / SHOW_ITER
+            act_loss_sum1=act_loss_sum1 / SHOW_ITER
+            entropy_sum1= entropy_sum1 / SHOW_ITER
+
+            print(total_loss_sum1,":total1")
+            print(val_loss_sum1, ":val1")
+            print(act_loss_sum1, ":act1")
+            print(entropy_sum1, ":entropy1",end="\n\n")
 
             # print(total_loss_sum2/SHOW_ITER, ":total2")
             # print(val_loss_sum2/SHOW_ITER, ":val2")
             # print(act_loss_sum2/SHOW_ITER, ":act2")
             # print(entropy_sum2/SHOW_ITER, ":entropy2",end="\n\n")
 
+            vis.line(X=torch.tensor([losscount]),
+                     Y=torch.tensor([total_loss_sum1]),
+                     win=total_loss_plot,
+                     update='append'
+                     )
+            vis.line(X=torch.tensor([losscount]),
+                     Y=torch.tensor([val_loss_sum1]),
+                     win=value_plot,
+                     update='append'
+                     )
+            vis.line(X=torch.tensor([losscount]),
+                     Y=torch.tensor([act_loss_sum1]),
+                     win=act_plot,
+                     update='append'
+                     )
+            vis.line(X=torch.tensor([losscount]),
+                     Y=torch.tensor([entropy_sum1]),
+                     win=entropy_plot,
+                     update='append'
+                     )
             act_loss_sum1 =0
             entropy_sum1 =0
             val_loss_sum1 =0
