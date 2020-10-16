@@ -16,6 +16,7 @@ from tron.minimax import MinimaxPlayer
 from tron import resnet
 from time import sleep
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 
@@ -29,12 +30,12 @@ eps = 1e-5
 alpha = 0.99
 
 NUM_PROCESSES = 32  # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 1 # 총 보상을 계산할 때 Advantage 학습을 할 단계 수
+NUM_ADVANCED_STEP = 3 # 총 보상을 계산할 때 Advantage 학습을 할 단계 수
 
 # A2C 손실함수 계산에 사용되는 상수
-value_loss_coef = 0.5
-entropy_coef = 0.01
-max_grad_norm = 0.5
+value_loss_coef = 1
+entropy_coef = 1
+max_grad_norm = 5
 
 MAP_WIDTH = 10
 MAP_HEIGHT = 10
@@ -104,6 +105,7 @@ class Net(nn.Module):
         torch.nn.init.xavier_uniform_(self.fc1.weight)
         torch.nn.init.xavier_uniform_(self.fc2.weight)
         torch.nn.init.xavier_uniform_(self.fc2.weight)
+
         torch.nn.init.xavier_uniform_(self.actor1.weight)
         torch.nn.init.xavier_uniform_(self.critic1.weight)
 
@@ -113,7 +115,7 @@ class Net(nn.Module):
 
     def forward(self, x):
         '''신경망 순전파 계산을 정의'''
-
+        x=x.to(device)
         x=self.batch_norm(x)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
@@ -152,7 +154,7 @@ class Net(nn.Module):
         value, actor_output = self(x)
 
         log_probs = F.log_softmax(actor_output, dim=1)  # dim=1이므로 행동의 종류에 대해 확률을 계산
-        action_log_probs = log_probs.gather(1, actions)  # 실제 행동의 로그 확률(log_probs)을 구함
+        action_log_probs = log_probs.gather(1, actions.to(device))  # 실제 행동의 로그 확률(log_probs)을 구함
 
         probs = F.softmax(actor_output, dim=1)  # dim=1이므로 행동의 종류에 대한 계산
         entropy = -(log_probs * probs).sum(-1).mean()
@@ -205,8 +207,9 @@ class player(Player):
 
 class Brain(object):
     def __init__(self, actor_critic):
-        self.actor_critic = actor_critic  # actor_critic은 Net 클래스로 구현한 신경망
-        self.optimizer = optim.RMSprop(self.actor_critic.parameters(), lr=lr, eps=eps, alpha=alpha)
+        self.actor_critic = actor_critic.to(device)  # actor_critic은 Net 클래스로 구현한 신경망
+        # self.optimizer = optim.RMSprop(self.actor_critic.parameters(), lr=lr, eps=eps, alpha=alpha)
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=lr)
 
     def update(self, rollouts):
         '''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
@@ -233,7 +236,8 @@ class Brain(object):
         # print(values)
         # print("?@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         # sleep(5)
-        advantages = rollouts.returns[:-1] - values  # torch.Size([5, 32, 1])
+        # print( rollouts.returns[:-1])
+        advantages = (rollouts.returns[:-1].to(device) - values)  # torch.Size([5, 32, 1])
 
         # Critic의 loss 계산
         value_loss = advantages.pow(2).mean()
@@ -319,7 +323,8 @@ def train():
     val_loss_sum2 = 0
     entropy_sum2 = 0
     act_loss_sum2 = 0
-
+    max=0
+    min=0
     total_loss_sum1 = 0
     val_loss_sum1 = 0
     entropy_sum1 = 0
@@ -332,7 +337,6 @@ def train():
     act_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='act_tracker', legend=['act'], showlegend=True))
     entropy_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='entropy_tracker', legend=['entropy'], showlegend=True))
     value_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='value_tracker', legend=['value'], showlegend=True))
-
     duration_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='duration', legend=['duration'], showlegend=True))
 
 
@@ -394,13 +398,13 @@ def train():
 
             # 행동을 선택
             with torch.no_grad():
-                action1 = actor_critic.act(rollouts1.observations[step])
-                action2 = actor_critic.act(rollouts2.observations[step])
+                action1 = actor_critic.act(rollouts1.observations[step]).to(device)
+                action2 = actor_critic.act(rollouts2.observations[step]).to(device)
 
             # (32,1)→(32,) -> tensor를 NumPy변수로
 
-            actions1 = action1.squeeze(1).numpy()
-            actions2 = action2.squeeze(1).numpy()
+            actions1 = action1.squeeze(1).cpu().numpy()
+            actions2 = action2.squeeze(1).cpu().numpy()
 
             # 한 단계를 실행
 
@@ -528,6 +532,13 @@ def train():
             act_loss_sum1=act_loss_sum1 / SHOW_ITER
             entropy_sum1= entropy_sum1 / SHOW_ITER
 
+            if(val_loss_sum1>max):
+                max=val_loss_sum1
+            if (total_loss_sum1 < min):
+                min=act_loss_sum1
+
+            print(max,"maxxxxxxxxxxxxxxxxxxxx")
+            print(min,"miiiiiiiiiiiiiin")
             print(total_loss_sum1,":total1")
             print(val_loss_sum1, ":val1")
             print(act_loss_sum1, ":act1")
