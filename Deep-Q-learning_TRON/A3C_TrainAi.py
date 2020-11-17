@@ -155,7 +155,10 @@ class Brain(object):
         total_loss.backward()  # 역전파 계산
         nn.utils.clip_grad_norm_(self.actor_critic.parameters(), max_grad_norm)
         # 결합 가중치가 한번에 너무 크게 변화하지 않도록, 경사를 0.5 이하로 제한함(클리핑)
-
+        print(total_loss.mean(),"토탈")
+        print(action_gain.mean(),"엑션게인")
+        print(entropy.mean(),"엔트로피")
+        print(value_loss.mean(),"벨류",end='\n\n')
         self.optimizer.step()  # 결합 가중치 수정
 
 

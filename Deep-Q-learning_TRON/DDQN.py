@@ -619,6 +619,7 @@ def train():
         # Update bak
         torch.save(brain.qnetwork_local.state_dict(), 'ais/' + folderName + '/' + 'local_ai.bak')
         torch.save(brain.qnetwork_target.state_dict(), 'ais/' + folderName + '/' + 'target_ai.bak')
+
         if(game_counter==start_mini):
             torch.save(brain.qnetwork_local.state_dict(), 'ais/' + folderName + '/' + 'local_ai_200k.bak')
             torch.save(brain.qnetwork_target.state_dict(), 'ais/' + folderName + '/' + 'target_ai_200k.bak')
