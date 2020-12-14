@@ -72,7 +72,7 @@ class Net(nn.Module):
         # self.conv3 = nn.Conv2d(64, 128, 5)
         # self.conv4 = nn.Conv2d(64, 256, 3, padding=1)
 
-        self.conv1=nn.Conv2d(3, 32, 6)
+        self.conv1 = nn.Conv2d(3, 32, 6)
         self.conv2 = nn.Conv2d(32, 64, 3)
 
         # self.fc1 = nn.Linear(128 * 2* 2, 256)
@@ -410,14 +410,8 @@ def pop_up(map):
 
 
 def train():
-    writer = SummaryWriter()
-    vis = visdom.Visdom()
+    writer = SummaryWriter('runs/Double DQN')
 
-    vis.close(env="main")
-    loss_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='loss_tracker', legend=['loss'], showlegend=True))
-    du_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='duration_tracker', legend=['duration'], showlegend=True))
-    win_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='rating_tracker', legend=['win_rate'], showlegend=True))
-    test_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='test', legend=['test'], showlegend=True))
 
     # Initialize exploration rate
 
@@ -468,10 +462,11 @@ def train():
             cycle_step += 1
             changeAi += 1
 
+            '''
             if(game_counter<start_mini):
                 changeAi=0
 
-
+            
             if (changeAi > minimax_match):
 
                 if (mini):
@@ -491,9 +486,9 @@ def train():
                     play_with_minimax=0
 
                 changeAi = 0
+            '''
 
-
-                # Initialize the starting positions
+            # Initialize the starting positions
             x1 = random.randint(0,MAP_WIDTH-1)
             y1 = random.randint(0,MAP_HEIGHT-1)
             x2 = random.randint(0,MAP_WIDTH-1)
@@ -523,7 +518,7 @@ def train():
             # old_state_p1 = torch.from_numpy(old_state_p1).float()
 
             old_state_p2 = game.map().state_for_player(2)
-            old_state_p2=pop_up(old_state_p2)
+            old_state_p2 = pop_up(old_state_p2)
             old_state_p2 = np.reshape(old_state_p2, (1, -1, old_state_p2.shape[1], old_state_p2.shape[2]))
             old_state_p2 = torch.from_numpy(old_state_p2).float()
 
@@ -538,13 +533,13 @@ def train():
                 brain.epsilon=epsilon
 
                 if(duel_mini):
-                    p1_action = minimax.action(game.map(), 2)
-                    p2_action = minimax.action(game.map(), 2)
+                    p1_action = minimax.action(game.map(), 2) - 1
+                    p2_action = minimax.action(game.map(), 2) - 1
 
 
                 elif(mini):
                     p1_action = brain.action(old_state_p1)
-                    p2_action = minimax.action(game.map(), 2)
+                    p2_action = minimax.action(game.map(), 2) - 1
                 else:
                     p1_action = brain.action(old_state_p1)
                     p2_action = brain.action(old_state_p2)
@@ -554,7 +549,7 @@ def train():
                 move_counter += 1
                 move+=1
 
-                p1_next_state=pop_up(p1_next_state)
+                p1_next_state = pop_up(p1_next_state)
                 p1_next_state = np.reshape(p1_next_state, (1, -1, p1_next_state.shape[1], p1_next_state.shape[2]))
                 p1_next_state = torch.from_numpy(p1_next_state).float()
 
@@ -646,31 +641,10 @@ def train():
             else:
                 p1_winrate=win_p1/DISPLAY_CYCLE
                 win_p1=0
-            vis_loss = float(loss_value)
-            vis.line(X=torch.tensor([game_counter]),
-                     Y=torch.tensor([vis_loss]),
-                     win=loss_plot,
-                     update='append'
-                     )
-            vis.line(X=torch.tensor([game_counter]),
-                     Y=torch.tensor([float(move_counter) / float(DISPLAY_CYCLE)]),
-                     win=du_plot,
-                     update='append'
-                     )
-            vis.line(X=torch.tensor([game_counter]),
-                     Y=torch.tensor([p1_winrate]),
-                     win=win_plot,
-                     update='append'
-                     )
 
-            # vis.line(X=torch.tensor([game_counter]),
-            #          Y=torch.tensor([under_minus_26]),
-            #          win=test_plot,
-            #          update='append'
-            #          )
-            writer.add_scalar('loss_tracker', vis_loss, game_counter)
-            writer.add_scalar('duration_tracker', (float(move_counter) / float(DISPLAY_CYCLE)), game_counter)
-            writer.add_scalar('ration_tracker', p1_winrate, game_counter)
+            writer.add_scalar('Training loss', float(loss_value), game_counter)
+            writer.add_scalar('Duration', (float(move_counter) / float(DISPLAY_CYCLE)), game_counter)
+            writer.add_scalar('Win rate', p1_winrate, game_counter)
             # writer.add_scalar('test', under_minus_26, game_counter)
 
             # with open('ais/' + folderName +'/'+ '/data.txt', 'a') as myfile:

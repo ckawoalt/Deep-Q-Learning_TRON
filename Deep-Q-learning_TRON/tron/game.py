@@ -16,7 +16,7 @@ class PositionPlayer:
         self.alive = True
 
     def body(self):
- 
+
         if self.id == 1:
             return Tile.PLAYER_ONE_BODY
         elif self.id == 2:
@@ -31,15 +31,12 @@ class PositionPlayer:
 
 
 class HistoryElement:
-
     def __init__(self, mmap, player_one_direction, player_two_direction):
         self.map = mmap
         self.player_one_direction = player_one_direction
         self.player_two_direction = player_two_direction
 
-
 class Game:
-
     def __init__(self, width, height, pps):
 
         self.width = width
@@ -59,7 +56,6 @@ class Game:
     def next_frame(self, window = None):
 
         map_clone = self.map()
-
 
         for pp in self.pps:
             map_clone[pp.position[0], pp.position[1]] = pp.body()
@@ -99,10 +95,8 @@ class Game:
                         return False
 
         for (id, pp) in enumerate(self.pps):
-           # print(id,"",pp.position)
-            if pp.position[0] < 0 or pp.position[1] < 0 or \
-               pp.position[0] >= self.width or pp.position[1] >= self.height:
-
+            # print(id,"",pp)
+            if pp.position[0] < 0 or pp.position[1] < 0 or pp.position[0] >= self.width or pp.position[1] >= self.height:
                 pp.alive = False
                 map_clone[pp.position[0], pp.position[1]] = pp.head()
 

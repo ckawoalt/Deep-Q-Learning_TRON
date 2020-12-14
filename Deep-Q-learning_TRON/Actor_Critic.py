@@ -12,31 +12,40 @@ from tron.DDQN_player import Player, Direction
 from tron.DDQN_game import Tile, Game, PositionPlayer
 
 from torch.utils.tensorboard import SummaryWriter
+
 from tron.minimax import MinimaxPlayer
 from tron import resnet
 from time import sleep
+from datetime import datetime
+
+
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-GAMMA = 0.9  # 시간할인율
+GAMMA = 0.99  # 시간할인율
 
 lr = 1e-3
 eps = 1e-5
 alpha = 0.99
 
-NUM_PROCESSES = 1  # 동시 실행 환경 수
+NUM_PROCESSES = 8  # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 1 # 총 보상을 계산할 때 Advantage 학습을 할 단계 수
 
 # A2C 손실함수 계산에 사용되는 상수
 value_loss_coef = 0.5
-entropy_coef = 1.8
-policy_loss_coef = 0.8
-max_grad_norm = 1
+entropy_coef = 0.05
+policy_loss_coef = 1
+max_grad_norm = 0.5
+
+
+eventid = datetime.now().strftime('runs/Actor-Critic-%Y%m-%d%H-%M%S-ent:') + str(entropy_coef) + '-step:' + str(NUM_ADVANCED_STEP) + '-process:' + str(NUM_PROCESSES)
+writer = SummaryWriter(eventid)
+
 
 MAP_WIDTH = 10
 MAP_HEIGHT = 10
 
-SHOW_ITER=20
+SHOW_ITER = 20
 minimax = MinimaxPlayer(2, 'voronoi')
 
 class RolloutStorage(object):
@@ -45,7 +54,7 @@ class RolloutStorage(object):
     def __init__(self, num_steps, num_processes):
 
         # self.observations = torch.zeros(num_steps + 1, num_processes,3,12,12)
-        self.observations = torch.zeros(num_steps + 1, num_processes,3,12, 12)
+        self.observations = torch.zeros(num_steps + 1, num_processes, 3,12,12)
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
         self.actions = torch.zeros(num_steps, num_processes, 1).long()
@@ -92,68 +101,35 @@ class Net(nn.Module):
 
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 5, 3, padding=1)
-        self.conv2 = nn.Conv2d(5, 10, 3 ,padding=1)
-        self.conv3 = nn.Conv2d(10, 15, 3, padding=1)
 
-        self.maxPool=nn.AvgPool2d(kernel_size=2)
+        self.conv1 = nn.Conv2d(3, 32, 6)
+        self.conv2 = nn.Conv2d(32, 64, 3)
 
-        self.fc1 = nn.Linear(15 * 3 * 3, 64)
-        self.fc2 = nn.Linear(64, 32)
-        self.fc3 = nn.Linear(32, 32)
+        self.fc1 = nn.Linear(64 * 5* 5, 64)
 
-        self.dropout = nn.Dropout(p=0.2)
-        self.actor1 = nn.Linear(32, 16)
-        self.actor2 = nn.Linear(16, 4)  # 행동을 결정하는 부분이므로 출력 갯수는 행동의 가짓수
+        self.actor1 = nn.Linear(64, 64)
+        self.actor2 = nn.Linear(64, 4)
 
-        self.critic1 = nn.Linear(32, 16)
-        self.critic2 = nn.Linear(16, 1)  # 상태가치를 출력하는 부분이므로 출력 갯수는 1개
-        self.batch_norm = nn.BatchNorm2d(3)
+        self.critic1 = nn.Linear(64, 64)
+        self.critic2 = nn.Linear(64, 1)
 
-        torch.nn.init.xavier_uniform_(self.fc1.weight)
-        torch.nn.init.xavier_uniform_(self.fc2.weight)
-        torch.nn.init.xavier_uniform_(self.fc2.weight)
-
-        torch.nn.init.xavier_uniform_(self.actor1.weight)
-        torch.nn.init.xavier_uniform_(self.critic1.weight)
-
-        torch.nn.init.xavier_uniform_(self.actor2.weight)
-        torch.nn.init.xavier_uniform_(self.critic2.weight)
-
+        self.dropout = nn.Dropout(p=0.3)
 
     def forward(self, x):
-        x=x.to(device)
         '''신경망 순전파 계산을 정의'''
-        # x=x.to(device)
-        # x=self.batch_norm(x)
-        # x = x.view(-1,3,12,12)
-
-        # c1 = F.relu(self.maxPool(self.conv1(x)))
-        # c2 = F.relu(self.maxPool(self.conv2(x)))
-        # c3 = F.relu(self.maxPool(self.conv3(x)))
-        # x=torch.cat((c1,c2,c3),dim=1)
+        x = x.to(device)
 
         x = F.relu(self.conv1(x))
-        x = F.relu(self.maxPool(self.conv2(x)))
+        x = F.relu(self.conv2(x))
 
-        x = F.relu(self.maxPool(self.conv3(x)))
-
-
-        x = x.view(-1, 15 *3 * 3)
-
-
+        x = x.view(-1, 64 * 5 * 5)
 
         x = self.dropout(F.relu(self.fc1(x)))
-        x = self.dropout(F.relu(self.fc2(x)))
-        x = self.dropout(F.relu(self.fc3(x)))
 
-        h1 = self.dropout(F.relu(self.actor1(x)))
-        actor_output =self.actor2(h1)
-
-        h2=self.dropout(F.relu(self.critic1(x)))
-        critic_output = self.critic2(h2)
-        actor_output = actor_output.to('cpu')
-        critic_output = critic_output.to('cpu')
+        actor_output = self.actor2(F.relu(self.actor1(x)))
+        critic_output = self.critic2(F.relu(self.critic1(x)))
+        #actor_output = actor_output.to('cpu') # Why???
+        #critic_output = critic_output.to('cpu')
 
         return critic_output, actor_output
 
@@ -177,10 +153,10 @@ class Net(nn.Module):
         value, actor_output = self(x)
 
         log_probs = F.log_softmax(actor_output, dim=1)  # dim=1이므로 행동의 종류에 대해 확률을 계산
-        print(actor_output)
-        print(torch.clamp(F.softmax(actor_output,dim=1),min=0.001,max=3))
-        print(actions)
-        action_log_probs = log_probs.gather(1, actions)  # 실제 행동의 로그 확률(log_probs)을 구함
+        #print(actor_output)
+        #print(torch.clamp(F.softmax(actor_output,dim=1),min=0.001,max=3))
+        #print(actions)
+        action_log_probs = log_probs.gather(1, actions.detach())  # 실제 행동의 로그 확률(log_probs)을 구함
 
         probs = F.softmax(actor_output, dim=1)  # dim=1이므로 행동의 종류에 대한 계산
         entropy = -(log_probs * probs).sum(-1).mean()
@@ -234,8 +210,8 @@ class player(Player):
 class Brain(object):
     def __init__(self, actor_critic):
         self.actor_critic = actor_critic.to(device)  # actor_critic은 Net 클래스로 구현한 신경망
-        self.optimizer = optim.RMSprop(self.actor_critic.parameters(), lr=lr, eps=eps, alpha=alpha)
-        # self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=lr)
+        #self.optimizer = optim.RMSprop(self.actor_critic.parameters(), lr=lr, eps=eps, alpha=alpha)
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=lr)
 
     def update(self, rollouts):
         '''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
@@ -243,8 +219,8 @@ class Brain(object):
         num_processes = NUM_PROCESSES
 
         values, action_log_probs, entropy = self.actor_critic.evaluate_actions(
-            rollouts.observations[:-1].view(-1,3,12, 12),
-            rollouts.actions.view(-1, 1))
+            rollouts.observations[:-1].view(-1, 3, 12, 12).to(device).detach(),
+            rollouts.actions.view(-1, 1).to(device).detach())
 
         # 주의 : 각 변수의 크기
         # rollouts.observations[:-1].view(-1, 4) torch.Size([80, 4])
@@ -263,7 +239,7 @@ class Brain(object):
         # print("?@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         # sleep(5)
         # print( rollouts.returns[:-1])
-        advantages = (rollouts.returns[:-1] - values)  # torch.Size([5, 32, 1])
+        advantages = rollouts.returns[:-1].to(device).detach() - values  # torch.Size([5, 32, 1])
 
         # Critic의 loss 계산
         value_loss = advantages.pow(2).mean()
@@ -274,14 +250,14 @@ class Brain(object):
         #
         # print(advantages.mean(),"advan.mean")
         # print(advantages.max(),"advan.max")
-        radvantages=advantages.detach().mean()
+        radvantages = advantages.detach().mean()
         action_gain = (action_log_probs*advantages.detach()).mean()
         # detach 메서드를 호출하여 advantages를 상수로 취급
 
         # 오차함수의 총합
         total_loss = (value_loss * value_loss_coef -
                       action_gain * policy_loss_coef - entropy * entropy_coef)
-        return_loss=total_loss
+        return_loss = total_loss
 
         # 결합 가중치 수정
         self.actor_critic.train()  # 신경망을 학습 모드로 전환
@@ -296,14 +272,12 @@ class Brain(object):
         return return_loss,value_loss,action_gain,entropy,action_log_probs.mean(),radvantages
 
 def pop_up(map):
-
     my=np.zeros((map.shape[0],map.shape[1]))
     ener=np.zeros((map.shape[0],map.shape[1]))
     wall=np.zeros((map.shape[0],map.shape[1]))
 
     for i in range(len(map[0])):
         for j in range(len(map[1])):
-
             if(map[i][j]==-1):
                 wall[i][j]=1
             elif (map[i][j] == -2):
@@ -360,20 +334,7 @@ def train():
     prob1_loss_sum1=0
     advan_loss_sum1=0
 
-    vis = visdom.Visdom()
-    vis.close(env="main")
-    # 동시 실행할 환경 수 만큼 env를 생성
-    total_loss_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='total_tracker', legend=['loss'], showlegend=True))
-    act_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='act_tracker', legend=['act'], showlegend=True))
-    entropy_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='entropy_tracker', legend=['entropy'], showlegend=True))
-    value_plot = vis.line(Y=torch.Tensor(1).zero_(), opts=dict(title='value_tracker', legend=['value'], showlegend=True))
-    prob_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='prob_tracker', legend=['prob'], showlegend=True))
-    advan_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='advan_tracker', legend=['advan'], showlegend=True))
-    duration_plot = vis.line(Y=torch.Tensor(1).zero_(),opts=dict(title='duration', legend=['duration'], showlegend=True))
-
-
     envs = [make_game() for i in range(NUM_PROCESSES)]
-
 
     # 모든 에이전트가 공유하는 Brain 객체를 생성
     # n_in = envs[0].observation_space.shape[0]  # 상태 변수 수는 12x12
@@ -381,7 +342,9 @@ def train():
     # n_mid = 32
 
     actor_critic = Net()  # 신경망 객체 생성
+    #actor_critic2 = Net()  # 신경망 객체 생성
     global_brain = Brain(actor_critic)
+    #global_brain2 = Brain(actor_critic2)
 
 
     rollouts1 = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES)  # rollouts 객체
@@ -428,19 +391,16 @@ def train():
     while(True):  # 전체 for문
         # advanced 학습 대상이 되는 각 단계에 대해 계산
         for step in range(NUM_ADVANCED_STEP):
-
             # 행동을 선택
             with torch.no_grad():
                 action1 = actor_critic.act(rollouts1.observations[step])
                 action2 = actor_critic.act(rollouts2.observations[step])
 
             # (32,1)→(32,) -> tensor를 NumPy변수로
-
             actions1 = action1.squeeze(1).to('cpu').numpy()
             actions2 = action2.squeeze(1).to('cpu').numpy()
 
             # 한 단계를 실행
-
             for i in range(NUM_PROCESSES):
                 # if (i == 0):
                 #     action1[i] = minimax.action(envs[i].map(), 1)
@@ -462,39 +422,31 @@ def train():
                 each_step2[i] += 1
 
                 if done_np[i]:
-
                     if envs[i].winner is None:
-
-                        reward_np1[i]=0.3
-                        reward_np2[i]=0.3
-
+                        reward_np1[i] = 0
+                        reward_np2[i] = 0
                     elif envs[i].winner == 1:
-
-                        reward_np1[i] = 2.0
-                        reward_np2[i] = 0.0
+                        reward_np1[i] = 1
+                        reward_np2[i] = -1
                     else:
-                        reward_np1[i] = 0.0
-                        reward_np2[i] = 2.0
-                    if(i==0):
+                        reward_np1[i] = -1
+                        reward_np2[i] = 1
+
+                    if (i == 0):
                         gamecount += 1
                         duration += each_step1[i]
 
                     if (i == 0):
-                        if(gamecount%SHOW_ITER==0):
-
-                            vis.line(X=torch.tensor([gamecount]),
-                                     Y=torch.tensor([duration/SHOW_ITER]),
-                                     win=duration_plot,
-                                     update='append'
-                                     )
+                        if(gamecount % SHOW_ITER==0):
+                            writer.add_scalar('Duration', duration/SHOW_ITER, gamecount)
                             duration=0
                         # print(reward_np1[i], "reward")
                         # print(each_step1[i], "step")
                     envs[i] = make_game()
                     obs_np1[i] = envs[i].map().state_for_player(1)
                     obs_np2[i] = envs[i].map().state_for_player(2)
-                    each_step1[i]=0
-                    each_step2[i]=0
+                    each_step1[i] = 0
+                    each_step2[i] = 0
                     # save_reward1[i] = 0.0;
                     # save_reward2[i] = 0.0;
                 else:
@@ -502,8 +454,8 @@ def train():
                     # save_reward2[i] += 1.0;
                     # reward_np1[i] = save_reward1[i] # 그 외의 경우는 보상 0 부여
                     # reward_np2[i] = save_reward2[i]
-                    reward_np1[i] = 1.0 # 그 외의 경우는 보상 0 부여
-                    reward_np2[i] = 1.0
+                    reward_np1[i] = 0.1 # 그 외의 경우는 보상 0 부여
+                    reward_np2[i] = 0.1
 
 
             # 보상을 tensor로 변환하고, 에피소드의 총보상에 더해줌
@@ -525,8 +477,7 @@ def train():
             # obs1 = torch.from_numpy(pop_up(obs_np1)).float()
             # obs2 = torch.from_numpy(pop_up(obs_np2)).float()
 
-
-            obs1=torch.tensor(np.array(obs1))
+            obs1 = torch.tensor(np.array(obs1))
             obs2 = torch.tensor(np.array(obs2))
 
             current_obs1 = obs1  # 최신 상태의 obs를 저장
@@ -542,17 +493,20 @@ def train():
 
         with torch.no_grad():
             next_value1 = actor_critic.get_value(rollouts1.observations[-1]).detach()
-            # next_value2 = actor_critic.get_value(rollouts2.observations[-1]).detach()
+            next_value2 = actor_critic.get_value(rollouts2.observations[-1]).detach()
             # rollouts.observations의 크기는 torch.Size([6, 32, 4])
 
         # 모든 단계의 할인총보상을 계산하고, rollouts의 변수 returns를 업데이트
         rollouts1.compute_returns(next_value1)
-        # rollouts2.compute_returns(next_value2)
+        rollouts2.compute_returns(next_value2)
 
         # 신경망 및 rollout 업데이트
         loss1,val1,act1,entro1,prob1,advan1=global_brain.update(rollouts1)
-        # loss2,val2,act2,entro2=global_brain.update(rollouts2)
+        loss2,val2,act2,entro2,prob2,advan2=global_brain.update(rollouts2)
         losscount+=1
+
+        torch.save(global_brain.actor_critic.state_dict(), 'ais/A3C/' + 'player_1.bak')
+        #torch.save(global_brain2.actor_critic.state_dict(), 'ais/a3c/' + 'player_2.bak')
 
         act_loss_sum1+=act1
         entropy_sum1+=entro1
@@ -580,50 +534,26 @@ def train():
             if (total_loss_sum1 < min):
                 min=act_loss_sum1
 
-            print(max,"maxxxxxxxxxxxxxxxxxxxx")
-            print(min,"miiiiiiiiiiiiiin")
-            print(total_loss_sum1,":total1")
-            print(val_loss_sum1, ":val1")
-            print(act_loss_sum1, ":act1")
-            print(entropy_sum1, ":entropy1",end="\n\n")
+            #print(max,"maxxxxxxxxxxxxxxxxxxxx")
+            #print(min,"miiiiiiiiiiiiiin")
+            #print(total_loss_sum1,":total1")
+            #print(val_loss_sum1, ":val1")
+            #print(act_loss_sum1, ":act1")
+            #print(entropy_sum1, ":entropy1",end="\n\n")
 
             # print(total_loss_sum2/SHOW_ITER, ":total2")
             # print(val_loss_sum2/SHOW_ITER, ":val2")
             # print(act_loss_sum2/SHOW_ITER, ":act2")
             # print(entropy_sum2/SHOW_ITER, ":entropy2",end="\n\n")
+            print(losscount)
 
-            vis.line(X=torch.tensor([losscount]),
-                     Y=torch.tensor([total_loss_sum1]),
-                     win=total_loss_plot,
-                     update='append'
-                     )
-            vis.line(X=torch.tensor([losscount]),
-                     Y=torch.tensor([val_loss_sum1]),
-                     win=value_plot,
-                     update='append'
-                     )
-            vis.line(X=torch.tensor([losscount]),
-                     Y=torch.tensor([act_loss_sum1]),
-                     win=act_plot,
-                     update='append'
-                     )
-            vis.line(X=torch.tensor([losscount]),
-                     Y=torch.tensor([entropy_sum1]),
-                     win=entropy_plot,
-                     update='append'
-                     )
+            writer.add_scalar('Training loss', total_loss_sum1, losscount)
+            writer.add_scalar('Value loss', val_loss_sum1, losscount)
+            writer.add_scalar('Action gain', act_loss_sum1, losscount)
+            writer.add_scalar('Entropy loss', entropy_sum1, losscount)
+            writer.add_scalar('Action log probability', prob1_loss_sum1, losscount)
+            writer.add_scalar('Advantage', advan_loss_sum1, losscount)
 
-            vis.line(X=torch.tensor([losscount]),
-                     Y=torch.tensor([prob1_loss_sum1]),
-                     win=prob_plot,
-                     update='append'
-                     )
-
-            vis.line(X=torch.tensor([losscount]),
-                     Y=torch.tensor([advan_loss_sum1]),
-                     win=advan_plot,
-                     update='append'
-                     )
 
             act_loss_sum1 =0
             entropy_sum1 =0
@@ -639,7 +569,7 @@ def train():
             # total_loss_sum2 =0
 
         rollouts1.after_update()
-        # rollouts2.after_update()
+        rollouts2.after_update()
 
 
 # main 실행

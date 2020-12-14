@@ -19,6 +19,7 @@ import os
 
 # General parameters
 folderName = 'survivor'
+folderName = 'survivor'
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Net parameters
@@ -466,7 +467,7 @@ def train(model):
 		batch = Transition(*zip(*transitions))
 		old_state_batch = torch.cat(batch.old_state)
 		action_batch = torch.cat(batch.action).long()
-		print(action_batch)
+		#print(action_batch)
 		new_state_batch = torch.cat(batch.new_state)
 		reward_batch = torch.cat(batch.reward).to(device)
 

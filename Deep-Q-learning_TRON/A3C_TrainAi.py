@@ -4,8 +4,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 from torch import optim
+from torch.utils.tensorboard import SummaryWriter
 
 
+
+writer = SummaryWriter('runs/actor_critic_cartpole')
 
 
 ENV = 'CartPole-v0'  # 태스크 이름
@@ -115,7 +118,7 @@ class Brain(object):
         self.actor_critic = actor_critic  # actor_critic은 Net 클래스로 구현한 신경망
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.01)
 
-    def update(self, rollouts):
+    def update(self, rollouts, j):
         '''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
         obs_shape = rollouts.observations.size()[2:]  # torch.Size([4, 84, 84])
         num_steps = NUM_ADVANCED_STEP
@@ -160,6 +163,10 @@ class Brain(object):
         print(entropy.mean(),"엔트로피")
         print(value_loss.mean(),"벨류",end='\n\n')
         self.optimizer.step()  # 결합 가중치 수정
+
+        writer.add_scalar('training loss',
+                          total_loss.mean() / 1000,
+                          j)
 
 
 # 실행 환경 클래스
@@ -286,7 +293,7 @@ class Environment:
             rollouts.compute_returns(next_value)
 
             # 신경망 및 rollout 업데이트
-            global_brain.update(rollouts)
+            global_brain.update(rollouts, j)
             rollouts.after_update()
 
             # 환경 갯수를 넘어서는 횟수로 200단계를 버텨내면 성공
