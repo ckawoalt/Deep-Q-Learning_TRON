@@ -28,12 +28,12 @@ lr = 1e-3
 eps = 1e-5
 alpha = 0.99
 
-NUM_PROCESSES = 8  # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 1 # 총 보상을 계산할 때 Advantage 학습을 할 단계 수
+NUM_PROCESSES = 16  # 동시 실행 환경 수
+NUM_ADVANCED_STEP = 5 # 총 보상을 계산할 때 Advantage 학습을 할 단계 수
 
 # A2C 손실함수 계산에 사용되는 상수
 value_loss_coef = 0.5
-entropy_coef = 0.05
+entropy_coef = 0.01
 policy_loss_coef = 1
 max_grad_norm = 0.5
 
@@ -54,7 +54,7 @@ class RolloutStorage(object):
     def __init__(self, num_steps, num_processes):
 
         # self.observations = torch.zeros(num_steps + 1, num_processes,3,12,12)
-        self.observations = torch.zeros(num_steps + 1, num_processes, 3,12,12)
+        self.observations = torch.zeros(num_steps + 1, num_processes, 3, 12, 12)
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
         self.actions = torch.zeros(num_steps, num_processes, 1).long()
@@ -119,15 +119,15 @@ class Net(nn.Module):
         '''신경망 순전파 계산을 정의'''
         x = x.to(device)
 
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
+        x = F.tanh(self.conv1(x))
+        x = F.tanh(self.conv2(x))
 
         x = x.view(-1, 64 * 5 * 5)
 
-        x = self.dropout(F.relu(self.fc1(x)))
+        x = self.dropout(F.tanh(self.fc1(x)))
 
-        actor_output = self.actor2(F.relu(self.actor1(x)))
-        critic_output = self.critic2(F.relu(self.critic1(x)))
+        actor_output = self.actor2(F.tanh(self.actor1(x)))
+        critic_output = self.critic2(F.tanh(self.critic1(x)))
         #actor_output = actor_output.to('cpu') # Why???
         #critic_output = critic_output.to('cpu')
 
@@ -165,9 +165,9 @@ class Net(nn.Module):
 # 에이전트의 두뇌 역할을 하는 클래스. 모든 에이전트가 공유한다
 
 
-class player(Player):
+class ACPlayer(Player):
     def __init__(self):
-        super(player, self).__init__()
+        super(ACPlayer, self).__init__()
 
         """Initialize an Agent object.
 
@@ -187,23 +187,20 @@ class player(Player):
             next_direction = Direction.DOWN
         if next_action == 4:
             next_direction = Direction.LEFT
-
         return next_direction
 
-    def next_position_and_direction(self, current_position,action):
-
+    def next_position_and_direction(self, current_position, action):
         direction = self.get_direction(action)
-        return (self.next_position(current_position, direction),direction)
+        return (self.next_position(current_position, direction), direction)
 
     def next_position(self, current_position, direction):
-
         if direction == Direction.UP:
             return (current_position[0] - 1, current_position[1])
-        if direction == Direction.RIGHT:
+        elif direction == Direction.RIGHT:
             return (current_position[0], current_position[1] + 1)
-        if direction == Direction.DOWN:
+        elif direction == Direction.DOWN:
             return (current_position[0] + 1, current_position[1])
-        if direction == Direction.LEFT:
+        elif direction == Direction.LEFT:
             return (current_position[0], current_position[1] - 1)
 
 
@@ -251,7 +248,7 @@ class Brain(object):
         # print(advantages.mean(),"advan.mean")
         # print(advantages.max(),"advan.max")
         radvantages = advantages.detach().mean()
-        action_gain = (action_log_probs*advantages.detach()).mean()
+        action_gain = (action_log_probs * advantages.detach()).mean()
         # detach 메서드를 호출하여 advantages를 상수로 취급
 
         # 오차함수의 총합
@@ -310,8 +307,8 @@ def make_game():
         y1 = random.randint(0, MAP_HEIGHT - 1)
     # Initialize the game
 
-    player1 = player()
-    player2 = player()
+    player1 = ACPlayer()
+    player2 = ACPlayer()
     #
     game = Game(MAP_WIDTH, MAP_HEIGHT, [
         PositionPlayer(1, player1, [x1, y1]),
@@ -427,9 +424,9 @@ def train():
                         reward_np2[i] = 0
                     elif envs[i].winner == 1:
                         reward_np1[i] = 1
-                        reward_np2[i] = -1
+                        reward_np2[i] = -10
                     else:
-                        reward_np1[i] = -1
+                        reward_np1[i] = -10
                         reward_np2[i] = 1
 
                     if (i == 0):
@@ -438,6 +435,7 @@ def train():
 
                     if (i == 0):
                         if(gamecount % SHOW_ITER==0):
+                            print('%d Episode: Finished after %d steps' % (gamecount, each_step1[i]))
                             writer.add_scalar('Duration', duration/SHOW_ITER, gamecount)
                             duration=0
                         # print(reward_np1[i], "reward")
@@ -454,8 +452,8 @@ def train():
                     # save_reward2[i] += 1.0;
                     # reward_np1[i] = save_reward1[i] # 그 외의 경우는 보상 0 부여
                     # reward_np2[i] = save_reward2[i]
-                    reward_np1[i] = 0.1 # 그 외의 경우는 보상 0 부여
-                    reward_np2[i] = 0.1
+                    reward_np1[i] = 1 # 그 외의 경우는 보상 0 부여
+                    reward_np2[i] = 1
 
 
             # 보상을 tensor로 변환하고, 에피소드의 총보상에 더해줌
@@ -492,8 +490,8 @@ def train():
         # advanced 학습 대상 중 마지막 단계의 상태로 예측하는 상태가치를 계산
 
         with torch.no_grad():
-            next_value1 = actor_critic.get_value(rollouts1.observations[-1]).detach()
-            next_value2 = actor_critic.get_value(rollouts2.observations[-1]).detach()
+            next_value1 = actor_critic.get_value(rollouts1.observations[-1])
+            next_value2 = actor_critic.get_value(rollouts2.observations[-1])
             # rollouts.observations의 크기는 torch.Size([6, 32, 4])
 
         # 모든 단계의 할인총보상을 계산하고, rollouts의 변수 returns를 업데이트
@@ -505,8 +503,7 @@ def train():
         loss2,val2,act2,entro2,prob2,advan2=global_brain.update(rollouts2)
         losscount+=1
 
-        torch.save(global_brain.actor_critic.state_dict(), 'ais/A3C/' + 'player_1.bak')
-        #torch.save(global_brain2.actor_critic.state_dict(), 'ais/a3c/' + 'player_2.bak')
+
 
         act_loss_sum1+=act1
         entropy_sum1+=entro1
@@ -545,7 +542,9 @@ def train():
             # print(val_loss_sum2/SHOW_ITER, ":val2")
             # print(act_loss_sum2/SHOW_ITER, ":act2")
             # print(entropy_sum2/SHOW_ITER, ":entropy2",end="\n\n")
-            print(losscount)
+            # print(losscount)
+            torch.save(global_brain.actor_critic.state_dict(), 'ais/A3C/' + 'player_' + str(total_loss_sum1) +  '.bak')
+            # torch.save(global_brain2.actor_critic.state_dict(), 'ais/a3c/' + 'player_2.bak')
 
             writer.add_scalar('Training loss', total_loss_sum1, losscount)
             writer.add_scalar('Value loss', val_loss_sum1, losscount)
