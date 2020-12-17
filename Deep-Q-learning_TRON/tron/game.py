@@ -2,7 +2,9 @@ from time import sleep
 from enum import Enum
 
 from tron.DDQN_map import Map, Tile
-from Actor_Critic import ACPlayer, Net
+from tron.DDQN_player import ACPlayer
+
+from ACKTR import Net, Brain
 
 import numpy as np
 import torch
@@ -91,10 +93,11 @@ class Game:
         for id, pp in enumerate(self.pps):
             if type(pp.player) == type(ACPlayer()):
                 ActorCritic = Net().to('cuda')
-                ActorCritic.load_state_dict(torch.load('ais/A3C/' + 'A2CPlayer.bak'))
+                global_brain = Brain(ActorCritic, acktr=True)
+                ActorCritic.load_state_dict(torch.load('ais/ACKTR/' + 'ACKTR_player.bak'))
                 ActorCritic.eval()
 
-                action = ActorCritic.act(torch.from_numpy(pop_up(np.array(self.map().state_for_player(id+1)))).float().unsqueeze(0))
+                action = ActorCritic.deterministic_act(torch.from_numpy(pop_up(np.array(self.map().state_for_player(id+1)))).float().unsqueeze(0))
                 (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, action)
             else:
                 (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, id + 1,

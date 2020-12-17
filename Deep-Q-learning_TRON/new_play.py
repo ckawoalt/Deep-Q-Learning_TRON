@@ -1,13 +1,12 @@
 
 import pygame
 
-from tron.game import Game, PositionPlayer
+from tron.DDQN_game import Game, PositionPlayer
 from tron.window import Window
-from tron.player import Direction, KeyboardPlayer, Mode
+from tron.DDQN_player import Direction, KeyboardPlayer, Mode, ACPlayer
 from ais.basic.ai import Ai as AiBasic
 from ais.survivor.ai import Ai as Aisurvivor
 from tron.minimax import MinimaxPlayer
-from Actor_Critic import ACPlayer, Net
 
 
 import random
@@ -44,7 +43,7 @@ def printGameResults(game):
 		print("It's a draw!")
 	else:
 		print('Player {} wins! Duration: {}'.format(game.winner, len(game.history)))
-	
+
 
 
 
@@ -62,7 +61,7 @@ def main():
 			x1, y1 = randomPosition(width, height)
 
 		game = Game(width, height, [
-			PositionPlayer(1, ACPlayer(), [x1,y1]),
+			PositionPlayer(1, MinimaxPlayer(2, 'voronoi'), [x1,y1]),
   	      	PositionPlayer(2, ACPlayer(), [x2,y2]),
  	   ])
 

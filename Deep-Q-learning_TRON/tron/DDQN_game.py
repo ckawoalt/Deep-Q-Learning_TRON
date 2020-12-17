@@ -2,6 +2,7 @@ from time import sleep
 from enum import Enum
 
 from tron.DDQN_map import Map, Tile
+from tron.DDQN_player import Player, Direction, ACPlayer
 
 class Winner(Enum):
     PLAYER_ONE = 1
@@ -65,14 +66,11 @@ class Game:
 
         for id, pp in enumerate(self.pps):
             # try:
-            (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, action[id])
-            # except:
-            #     print("ERRRRRRRRRRRRRRRRRRRRROR")
-            #     if id == 0:
-            #         self.winner = 2
-            #     elif id == 1:
-            #         self.winner = 1
-            #     return False
+            if type(pp.player) == type(ACPlayer()):
+                (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, action[id])
+            else:
+                (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, id + 1,
+                                                                                           self.map())
 
         self.history[-1].player_one_direction = self.pps[0].player.direction
         self.history[-1].player_two_direction = self.pps[1].player.direction

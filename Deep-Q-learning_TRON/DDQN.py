@@ -1,22 +1,22 @@
 from tron.DDQN_player import Player, Direction
 from tron.DDQN_game import Tile, Game, PositionPlayer
 from tron.window import Window
-from collections import namedtuple,deque
-from torch.utils.tensorboard import SummaryWriter
 from tron.minimax import MinimaxPlayer
 from tron import resnet
 
+from collections import namedtuple,deque
 import copy
+import numpy as np
+import random
+import os
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import numpy as np
-import random
-import visdom
+from torch.utils.tensorboard import SummaryWriter
 
-import os
+from util import *
 
 
 # General parameters
@@ -384,29 +384,6 @@ class ReplayBuffer:
         return len(self.memory)
 
 
-def pop_up(map):
-    my=np.zeros((map.shape[0],map.shape[1]))
-    ener=np.zeros((map.shape[0],map.shape[1]))
-    wall=np.zeros((map.shape[0],map.shape[1]))
-
-    for i in range(len(map[0])):
-        for j in range(len(map[1])):
-
-            if(map[i][j]==-1):
-                wall[i][j]=1
-            elif (map[i][j] == -2):
-                my[i][j] = 1
-            elif (map[i][j] == -3):
-                ener[i][j] = 1
-            elif (map[i][j] == -10):
-                ener[i][j] = 10
-            elif (map[i][j] == 10):
-                my[i][j] = 10
-    wall=wall.reshape(1,wall.shape[0],wall.shape[1])
-    ener = ener.reshape(1, ener.shape[0], ener.shape[1])
-    my = my.reshape(1, my.shape[0], my.shape[1])
-
-    return np.concatenate((wall,my,ener),axis=0)
 
 
 def train():
