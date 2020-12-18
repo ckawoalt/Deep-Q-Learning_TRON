@@ -79,8 +79,6 @@ class Map:
             return None
 
     def state_for_player(self, p):
-
-
         return self.apply(lambda tile: self.color(tile, p)).array().T
 
 

@@ -91,3 +91,41 @@ class KeyboardPlayer(Player):
     def action(self, map, id):
 
         return self.direction
+
+class ACPlayer(Player):
+    def __init__(self):
+        super(ACPlayer, self).__init__()
+
+        """Initialize an Agent object.
+
+               Params
+               =======
+                   state_size (int): dimension of each state
+                   action_size (int): dimension of each action
+                   seed (int): random seed
+               """
+    def get_direction(self,next_action):
+        next_action=next_action+1
+        if next_action == 1:
+            next_direction = Direction.UP
+        if next_action == 2:
+            next_direction = Direction.RIGHT
+        if next_action == 3:
+            next_direction = Direction.DOWN
+        if next_action == 4:
+            next_direction = Direction.LEFT
+        return next_direction
+
+    def next_position_and_direction(self, current_position, action):
+        direction = self.get_direction(action)
+        return (self.next_position(current_position, direction), direction)
+
+    def next_position(self, current_position, direction):
+        if direction == Direction.UP:
+            return (current_position[0] - 1, current_position[1])
+        elif direction == Direction.RIGHT:
+            return (current_position[0], current_position[1] + 1)
+        elif direction == Direction.DOWN:
+            return (current_position[0] + 1, current_position[1])
+        elif direction == Direction.LEFT:
+            return (current_position[0], current_position[1] - 1)

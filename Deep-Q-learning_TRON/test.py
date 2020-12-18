@@ -1,21 +1,12 @@
-import math
 import numpy as np
-if __name__ == "__main__":
 
-   a= np.zeros()
-   a = math.log2(0.02) *0.02
-   a += math.log2(0.1) *0.1
-   a += math.log2(0.07) *0.07
-   a += math.log2(0.002) *0.002
-   a += math.log2(0.8) *0.8
-   a += math.log2(0.008) * 0.008
 
-   print(-a)
-   print(0.8*1+0.1*2+0.07*3+0.08*4+0.008*5+0.002*5)
+a = np.array([[1, 2], [3, 4]])
+b = np.array([[7, 8], [9, 10]])
+c = np.array([[7, 8], [9, 10]])
+a=a.reshape(1,a.shape[0],a.shape[1])
+b=b.reshape(1,b.shape[0],b.shape[1])
+c=c.reshape(1,c.shape[0],c.shape[1])
 
-   0.02
-   0.1
-   0.07
-   0.002
-   0.8
-   0.008
+print(np.concatenate((a, b),axis=0))
+print(np.concatenate((a, b,c),axis=0).shape)
