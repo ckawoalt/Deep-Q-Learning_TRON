@@ -1,5 +1,5 @@
-from tron.player import Player, Direction
-from tron.game import Tile, Game, PositionPlayer
+from object.player import Player, Direction
+from object.game import Tile, Game, PositionPlayer
 from tron.window import Window
 from collections import namedtuple
 from torch.utils.tensorboard import SummaryWriter
@@ -18,7 +18,6 @@ import os
 
 
 # General parameters
-folderName = 'survivor'
 folderName = 'survivor'
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -467,7 +466,7 @@ def train(model):
 		batch = Transition(*zip(*transitions))
 		old_state_batch = torch.cat(batch.old_state)
 		action_batch = torch.cat(batch.action).long()
-		#print(action_batch)
+		print(action_batch)
 		new_state_batch = torch.cat(batch.new_state)
 		reward_batch = torch.cat(batch.reward).to(device)
 

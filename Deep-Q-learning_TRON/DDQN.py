@@ -1,16 +1,9 @@
-from tron.DDQN_player import Player, Direction
-from tron.DDQN_game import Tile, Game, PositionPlayer
-from tron.window import Window
 from tron.minimax import MinimaxPlayer
 from tron import resnet
 
 from collections import namedtuple,deque
-import copy
-import numpy as np
-import random
 import os
 
-import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
@@ -246,7 +239,6 @@ class Agent():
             return np.argmax(action_values.cpu().data.numpy())+1
         else:
             return random.choice(np.arange(self.action_size)+1)
-
 
     def find_file(self, name):
         return '/'.join(self.__module__.split('.')[:-1]) + '/' + name

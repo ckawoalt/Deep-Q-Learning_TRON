@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="ksk@knutoc.asuscomm.com:9000" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" autoUpload="Always" serverName="sol@210.115.46.58:22" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
-      <paths name="ksk@knutoc.asuscomm.com:9000">
+      <paths name="sol@210.115.46.58:22">
         <serverdata>
           <mappings>
-            <mapping deploy="/tmp/pycharm_project_576" local="$PROJECT_DIR$" />
+            <mapping deploy="/home/sol/python/pycharm/Deep-Q-Learning_TRON" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>

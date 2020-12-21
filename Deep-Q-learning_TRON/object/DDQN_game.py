@@ -1,8 +1,10 @@
 from time import sleep
 from enum import Enum
 
-from tron.DDQN_map import Map, Tile
-from tron.DDQN_player import Player, Direction, ACPlayer
+from object.DDQN_map import Map, Tile
+from object.DDQN_player import Player, Direction, ACPlayer
+from util import pop_up
+import numpy as np
 
 class Winner(Enum):
     PLAYER_ONE = 1
@@ -55,7 +57,7 @@ class Game:
     def map(self):
         return self.history[-1].map.clone()
 
-    def next_frame(self, action_p1, action_p2):
+    def next_frame(self, action_p1, action_p2,window=None):
 
         map_clone = self.map()
 
@@ -68,9 +70,9 @@ class Game:
             # try:
             if type(pp.player) == type(ACPlayer()):
                 (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, action[id])
+
             else:
-                (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, id + 1,
-                                                                                           self.map())
+                (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, id + 1,self.map())
 
         self.history[-1].player_one_direction = self.pps[0].player.direction
         self.history[-1].player_two_direction = self.pps[1].player.direction
@@ -87,14 +89,30 @@ class Game:
                 pp.alive = False
 
                 map_clone[pp.position[0], pp.position[1]] = pp.head()
-
-
             else:
                 map_clone[pp.position[0], pp.position[1]] = pp.head()
 
         self.history.append(HistoryElement(map_clone, None, None))
         self.next_p1 = self.history[-1].map.state_for_player(1)
         self.next_p2 = self.history[-1].map.state_for_player(2)
+
+        if window:
+            import pygame
+            while True:
+                event = pygame.event.poll()
+
+                if event.type == pygame.NOEVENT:
+                    break
+
+                for pp in self.pps:
+                    try:
+                        pp.player.manage_event(event)
+                    except:
+                        if id == 0:
+                            self.winner = 2
+                        elif id == 1:
+                            self.winner = 1
+                        return False
 
         return True
 
@@ -123,7 +141,8 @@ class Game:
 
         return self.next_p1, self.reword, self.next_p2, self.reword, self.done
 
-    def main_loop(self, window=None):
+    def main_loop(self,model, window=None):
+
         if window:
             window.render_map(self.map())
 
@@ -134,8 +153,13 @@ class Game:
             if window:
                 sleep(0.3)
             # sleep(0.5)
+            map=self.map()
 
-            if not self.next_frame(window):
+
+            action1=model.act( np.expand_dims(pop_up(map.state_for_player(1)), axis=0))
+            action2 = model.act( np.expand_dims(pop_up(map.state_for_player(2)), axis=0))
+
+            if not self.next_frame(action1,action2,window):
                 break
 
             for pp in self.pps:
@@ -152,3 +176,63 @@ class Game:
 
             if window:
                 window.render_map(self.map())
+
+    def loop_game(self,action1,action2, window = None):
+
+        map_clone = self.map()
+
+
+        for pp in self.pps:
+            map_clone[pp.position[0], pp.position[1]] = pp.body()
+
+        for id, pp in enumerate(self.pps):
+            try:
+                (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, id + 1, self.map())
+            except:
+                print("ERRRRRRRRRRRRRRRRRRRRROR")
+                if id == 0:
+                    self.winner = 2
+                elif id == 1:
+                    self.winner = 1
+                return False
+
+        self.history[-1].player_one_direction = self.pps[0].player.direction
+        self.history[-1].player_two_direction = self.pps[1].player.direction
+
+        if window:
+            import pygame
+            while True:
+                event = pygame.event.poll()
+
+                if event.type == pygame.NOEVENT:
+                    break
+
+                for pp in self.pps:
+                    try:
+                        pp.player.manage_event(event)
+                    except:
+                        if id == 0:
+                            self.winner = 2
+                        elif id == 1:
+                            self.winner = 1
+                        return False
+
+        for (id, pp) in enumerate(self.pps):
+            print(id,"",pp)
+
+            if pp.position[0] < 0 or pp.position[1] < 0 or \
+               pp.position[0] >= self.width or pp.position[1] >= self.height:
+
+                pp.alive = False
+                map_clone[pp.position[0], pp.position[1]] = pp.head()
+
+            elif map_clone[pp.position[0], pp.position[1]] is not Tile.EMPTY:
+                pp.alive = False
+                map_clone[pp.position[0], pp.position[1]] = pp.head()
+
+            else:
+                map_clone[pp.position[0], pp.position[1]] = pp.head()
+
+        self.history.append(HistoryElement(map_clone, None, None))
+
+        return True

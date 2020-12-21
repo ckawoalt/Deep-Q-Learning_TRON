@@ -9,8 +9,8 @@ from torch.utils.tensorboard import SummaryWriter
 import random
 import visdom
 
-from tron.DDQN_player import Player, Direction, ACPlayer
-from tron.DDQN_game import Tile, Game, PositionPlayer
+from object.DDQN_player import Player, Direction, ACPlayer
+from object.DDQN_game import Tile, Game, PositionPlayer
 from tron.minimax import MinimaxPlayer
 from tron import resnet
 
@@ -136,9 +136,7 @@ class Net(nn.Module):
         value, actor_output = self(x)
 
         log_probs = F.log_softmax(actor_output, dim=1)  # dim=1이므로 행동의 종류에 대해 확률을 계산
-        #print(actor_output)
-        #print(torch.clamp(F.softmax(actor_output,dim=1),min=0.001,max=3))
-        #print(actions)
+
         action_log_probs = log_probs.gather(1, actions.detach())  # 실제 행동의 로그 확률(log_probs)을 구함
 
         probs = F.softmax(actor_output, dim=1)  # dim=1이므로 행동의 종류에 대한 계산
@@ -181,22 +179,13 @@ class Brain(object):
         action_log_probs = action_log_probs.view(num_steps, num_processes, 1) # torch.Size([160, 1]) ->([5, 32, 1])
 
         # advantage(행동가치-상태가치) 계산
-        # print(rollouts.returns[:-1])
-        # print(values)
-        # print("?@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-        # sleep(5)
-        # print( rollouts.returns[:-1])
         advantages = rollouts.returns[:-1].to(device).detach() - values  # torch.Size([5, 32, 1])
 
         # Critic의 loss 계산
         value_loss = advantages.pow(2).mean()
 
         # Actor의 gain 계산, 나중에 -1을 곱하면 loss가 된다
-        # print(action_log_probs.mean(),"ac.mean")
-        # print(action_log_probs.max(), "ac.max")
-        #
-        # print(advantages.mean(),"advan.mean")
-        # print(advantages.max(),"advan.max")
+
         radvantages = advantages.detach().mean()
         action_gain = (action_log_probs * advantages.detach()).mean()
         # detach 메서드를 호출하여 advantages를 상수로 취급
@@ -286,7 +275,6 @@ def train():
     save_reward2 = np.zeros([NUM_PROCESSES])
     each_step2 = np.zeros(NUM_PROCESSES)  # 각 환경의 단계 수를 기록
 
-    episode = 0  # 환경 0의 에피소드 수
     done_np = np.zeros([NUM_PROCESSES, 1])  # Numpy 배열
 
     # 초기 상태로부터 시작
@@ -322,8 +310,8 @@ def train():
                 action2 = actor_critic.act(rollouts2.observations[step])
 
             # (32,1)→(32,) -> tensor를 NumPy변수로
-            actions1 = action1.squeeze(1).to('cpu').numpy()
-            actions2 = action2.squeeze(1).to('cpu').numpy()
+            # actions1 = action1.squeeze(1).to('cpu').numpy()
+            # actions2 = action2.squeeze(1).to('cpu').numpy()
 
             # 한 단계를 실행
             for i in range(NUM_PROCESSES):
@@ -335,8 +323,11 @@ def train():
                 # print(envs[i].map().state_for_player(1))
                 # print(envs[i].map().state_for_player(2))
                 # print(obs_np2[i])
-                obs_np1[i], reward_np1[i],obs_np2[i], reward_np2[i], done_np[i] = envs[i].step(actions1[i],actions2[i])
+                # obs_np1[i], reward_np1[i],obs_np2[i], reward_np2[i], done_np[i] = envs[i].step(actions1[i],actions2[i])
+                obs_np1[i], reward_np1[i], obs_np2[i], reward_np2[i], done_np[i] = envs[i].step(minimax.action(envs[i].map(), 1),
+                                                                                                minimax.action(envs[i].map(), 2))
                 # print(obs_np1[i])
+
                 # if(gamecount>10000):
                 #     if(i==0):
                 #         sleep(3)
@@ -351,11 +342,11 @@ def train():
                         reward_np1[i] = 0
                         reward_np2[i] = 0
                     elif envs[i].winner == 1:
-                        reward_np1[i] = 1
+                        reward_np1[i] = 10
                         reward_np2[i] = -10
                     else:
                         reward_np1[i] = -10
-                        reward_np2[i] = 1
+                        reward_np2[i] = 10
 
                     if (i == 0):
                         gamecount += 1
@@ -471,7 +462,7 @@ def train():
             # print(act_loss_sum2/SHOW_ITER, ":act2")
             # print(entropy_sum2/SHOW_ITER, ":entropy2",end="\n\n")
             # print(losscount)
-            torch.save(global_brain.actor_critic.state_dict(), 'ais/ACKTR/' + 'ACKTR_player.bak')
+            torch.save(global_brain.actor_critic.state_dict(), './ais/ACKTR/' + 'ACKTR_player.bak')
             # torch.save(global_brain2.actor_critic.state_dict(), 'ais/a3c/' + 'player_2.bak')
 
             writer.add_scalar('Training loss', total_loss_sum1, losscount)
@@ -507,4 +498,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

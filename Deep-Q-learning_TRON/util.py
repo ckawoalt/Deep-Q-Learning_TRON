@@ -1,10 +1,10 @@
-import torch
 import numpy as np
 import random
 
 from config import *
-from tron.DDQN_player import *
-from tron.DDQN_game import *
+from object.DDQN_game import *
+from object.DDQN_player import *
+
 
 def pop_up(map):
     my=np.zeros((map.shape[0],map.shape[1]))
@@ -47,7 +47,8 @@ def make_game():
 
     player1 = ACPlayer()
     player2 = ACPlayer()
-    #player2 = MinimaxPlayer(2, "voronoi")
+    # player1 = MinimaxPlayer(2, "voronoi")
+    # player2 = MinimaxPlayer(2, "voronoi")
 
     #
     game = Game(MAP_WIDTH, MAP_HEIGHT, [
