@@ -26,6 +26,7 @@ wheels/
 MANIFEST
 .idea/
 Deep-Q-learning_TRON/runs/
+Deep-Q-learning_TRON/save/
 Deep-Q-learning_TRON/ais/
 
 # PyInstaller
