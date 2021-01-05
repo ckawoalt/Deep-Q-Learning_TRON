@@ -76,17 +76,12 @@ def make_game(p1,p2,mode=None):
     return game
 
 
-def get_reward(game, constants, winner_len=0, loser_len=0):
+def get_reward(game, constants):
     if game.winner is None:
         return 0, 0
 
     elif game.winner == 1:
-        if loser_len == 0 and winner_len == 0:
             return constants[0], constants[1]
-        else:
-            return constants[2] + constants[3]/loser_len, constants[1]
     else:
-        if loser_len == 0:
             return constants[1], constants[0]
-        else:
-            return constants[1], constants[2] + constants[3]/loser_len
+

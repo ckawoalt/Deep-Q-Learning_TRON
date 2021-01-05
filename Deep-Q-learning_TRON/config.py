@@ -28,12 +28,13 @@ SHOW_ITER = 20
 PLAY_WITH_MINIMAX=50
 
 # 리워드 function
-win=1.0
-lose=-1.0
-draw=0
-slide=0.3
+
+slide=0.1
 
 # win, lose, win_separated, win_length_factor
-reward_cons1 = [10, -10, 10, 150]
-reward_cons2 = [10, -20, 20, 150]
-reward_cons3 = [20, -10, 10, 200]
+
+reward_cons1 = [10, -10]
+
+reward_cons2 = [10, -20]
+
+reward_cons3 = [20, -10]

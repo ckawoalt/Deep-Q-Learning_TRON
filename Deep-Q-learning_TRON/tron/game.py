@@ -71,11 +71,11 @@ class Game:
         self.history = [HistoryElement(mmap, None, None)]
         self.pps = pps
         self.winner = None
-        self.loser_len=0
-        self.winner_len = 0
+        # self.loser_len=0
+        # self.winner_len = 0
         self.next_p1 = []
         self.next_p2 = []
-        self.reword = 0
+        # self.reward = 0
         self.done = False
         self.mode=mode
 
@@ -85,6 +85,10 @@ class Game:
     def map(self):
         return self.history[-1].map.clone()
 
+    """ 
+    
+    check independent condition
+    
     def check_separated(self, map_clone, p1):
         path_queue = SetQueue()
         dist_map = np.copy(map_clone.state_for_player(1))
@@ -116,6 +120,8 @@ class Game:
 
         return True
 
+    check player's logest path 
+
     def get_longest_path(self, map_clone, p1, p2):
         p1_length = self.get_length(np.copy(map_clone.state_for_player(1)), p1.position[0] + 1, p1.position[1] + 1, 0, None)
         p2_length = self.get_length(np.copy(map_clone.state_for_player(2)), p2.position[0] + 1, p2.position[1] + 1, 0, None)
@@ -134,6 +140,8 @@ class Game:
             return 1
         else:
             return 0
+
+ get able longest path
 
     def get_length(self, map_clone, x, y, length, prev_length):
 
@@ -163,7 +171,7 @@ class Game:
             return length
 
         return max(l1, l2, l3, l4)
-
+"""
     def next_frame(self, action_p1, action_p2, window=None):
 
         map_clone = self.map()
@@ -216,7 +224,7 @@ class Game:
 
 
 
-        done = False
+
         for (id, pp) in enumerate(self.pps):
             if pp.position[0] < 0 or pp.position[1] < 0 or \
                     pp.position[0] >= self.width or pp.position[1] >= self.height:
@@ -227,7 +235,10 @@ class Game:
                 map_clone[pp.position[0], pp.position[1]] = pp.head()
             else:
                 map_clone[pp.position[0], pp.position[1]] = pp.head()
-
+        """
+        if not done and independent condition 
+        get player's longest path
+        
         # if not done and self.check_separated(map_clone, self.pps[0]):
         #     winner = self.get_longest_path(map_clone, self.pps[0], self.pps[1])
         #     if winner == 1:
@@ -237,6 +248,7 @@ class Game:
         #     else:
         #         self.pps[0].alive = False
         #         self.pps[1].alive = False
+        """
 
         self.history.append(HistoryElement(map_clone, None, None))
         self.next_p1 = self.history[-1].map.state_for_player(1)
@@ -266,12 +278,12 @@ class Game:
 
         alive_count = 0
         alive = None
-        self.reword = 10
+
 
         if not self.next_frame(action_p1, action_p2):
             self.done = True
 
-            return self.next_p1, self.reword, self.next_p2, self.reword, self.done,self.loser_len,self.winner_len
+            return self.next_p1, self.next_p2, self.done #,self.loser_len,self.winner_len
 
         for pp in self.pps:
             if pp.alive:
@@ -286,7 +298,7 @@ class Game:
 
             self.done = True
 
-        return self.next_p1, self.reword, self.next_p2, self.reword, self.done,0,0
+        return self.next_p1,  self.next_p2,  self.done#,0,0
 
     def main_loop(self,model, pop=None,window=None,model2=None,condition=None):
 

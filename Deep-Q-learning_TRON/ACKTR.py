@@ -24,7 +24,7 @@ class RolloutStorage(object):
     def __init__(self, num_steps, num_processes):
 
         # self.observations = torch.zeros(num_steps + 1, num_processes,3,12,12)
-        self.observations = torch.zeros(num_steps + 1, num_processes, 3, 12, 12)
+        self.observations = torch.zeros(num_steps + 1, num_processes, 3, MAP_WIDTH+2, MAP_HEIGHT+2)
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
         self.actions = torch.zeros(num_steps, num_processes, 1).long()
@@ -81,7 +81,7 @@ class Brain(object):
         num_processes = NUM_PROCESSES
 
         values, action_log_probs, entropy = self.actor_critic.evaluate_actions(
-            rollouts.observations[:-1].view(-1, 3, 12, 12).to(device).detach(),
+            rollouts.observations[:-1].view(-1, 3, MAP_WIDTH+2, MAP_HEIGHT+2).to(device).detach(),
             rollouts.actions.view(-1, 1).to(device).detach())
 
         # 주의 : 각 변수의 크기
@@ -178,19 +178,19 @@ def train(args):
     elif args.m == "3":
         actor_critic = Net3()
     else:
-        actor_critic = Net()
+        actor_critic = Net3()
 
     global_brain = Brain(actor_critic,args, acktr=True)
 
     rollouts1 = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES)  # rollouts 객체
     episode_rewards1 = torch.zeros([NUM_PROCESSES, 1])  # 현재 에피소드의 보상
-    obs_np1 = np.zeros([NUM_PROCESSES,12,12])  # Numpy 배열 # 게임 상황이 12x12임
+    obs_np1 = np.zeros([NUM_PROCESSES,MAP_WIDTH+2,MAP_HEIGHT+2])  # Numpy 배열 # 게임 상황이 12x12임
     reward_np1 = np.zeros([NUM_PROCESSES, 1])  # Numpy 배열
     each_step1 = np.zeros(NUM_PROCESSES)  # 각 환경의 단계 수를 기록
 
     rollouts2 = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES)  # rollouts 객체
     episode_rewards2 = torch.zeros([NUM_PROCESSES, 1])  # 현재 에피소드의 보상
-    obs_np2 = np.zeros([NUM_PROCESSES,12, 12])  # Numpy 배열 # 게임 상황이 12x12임
+    obs_np2 = np.zeros([NUM_PROCESSES, MAP_WIDTH+2,MAP_HEIGHT+2])  # Numpy 배열 # 게임 상황이 12x12임
     reward_np2 = np.zeros([NUM_PROCESSES, 1])  # Numpy 배열
     each_step2 = np.zeros(NUM_PROCESSES)  # 각 환경의 단계 수를 기록
 
@@ -238,6 +238,7 @@ def train(args):
                 action2 = actor_critic.act(rollouts2.observations[step])
 
             # (32,1)→(32,) -> tensor를 NumPy변수로
+
             actions1 = action1.squeeze(1).to('cpu').numpy()
             actions2 = action2.squeeze(1).to('cpu').numpy()
 
@@ -246,16 +247,18 @@ def train(args):
                 act1 = actions1[i] if ai_p1 else minimax.action(envs[i].map(), 1)
                 act2 = actions2[i] if ai_p2 else minimax.action(envs[i].map(), 2)
 
-                obs_np1[i], reward_np1[i], obs_np2[i], reward_np2[i], done_np[i],loser_len,winner_len = envs[i].step(act1,act2)
+                obs_np1[i], obs_np2[i], done_np[i] = envs[i].step(act1,act2)
 
                 each_step1[i] += 1
                 each_step2[i] += 1
 
                 if done_np[i]:
-                    reward_np1[i],reward_np2[i]=get_reward(envs[i], reward_constants, winner_len, loser_len)
+
+                    reward_np1[i],reward_np2[i]=get_reward(envs[i], reward_constants)
+
                     if i == 0:
                         gamecount += 1
-                        duration += each_step1[i]+loser_len
+                        duration += each_step1[i]
 
                         if gamecount % SHOW_ITER == 0:
                             print('%d Episode: Finished after %d steps' % (gamecount, each_step1[i]))
@@ -269,7 +272,7 @@ def train(args):
                     each_step1[i] = 0
                     each_step2[i] = 0
                 else:
-                    reward_np1[i] = -1  # 그 외의 경우는 보상 0 부여
+                    reward_np1[i] = -1  # 그 외의 경우는 보상 -1 부여
                     reward_np2[i] = -1
 
             # 보상을 tensor로 변환하고, 에피소드의 총보상에 더해줌
