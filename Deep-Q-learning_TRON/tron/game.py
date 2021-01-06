@@ -62,6 +62,8 @@ class HistoryElement:
         self.player_two_direction = player_two_direction
 
 
+
+
 class Game:
     def __init__(self, width, height, pps,mode=None):
 
@@ -78,12 +80,46 @@ class Game:
         # self.reward = 0
         self.done = False
         self.mode=mode
+        self.degree=random.randint(-15,15)
 
         for pp in self.pps:
             self.history[-1].map[pp.position[0], pp.position[1]] = pp.head()
 
     def map(self):
         return self.history[-1].map.clone()
+
+    def get_rate(self):
+
+        if self.degree>15:
+            rate=0
+        elif self.degree > 0:
+            rate=0.1
+        elif self.degree > -15:
+            rate = 0.2
+        else:
+            rate = 0.3
+
+        return rate
+
+    def get_degree(self):
+
+        return self.degree
+
+    def change_degree(self):
+
+        if random.random()>0.5:
+            self.degree+=random.randint(0,3)
+        else:
+            self.degree -=random.randint(0, 3)
+
+    def prob_map(self):
+
+        temp = np.zeros((MAP_WIDTH + 2, MAP_HEIGHT + 2))
+
+        for i in range(MAP_HEIGHT + 2):
+            for j in range(MAP_WIDTH + 2):
+                temp[i][j] = self.degree
+        return temp
 
     """ 
     
@@ -172,7 +208,7 @@ class Game:
 
         return max(l1, l2, l3, l4)
 """
-    def next_frame(self, action_p1, action_p2, window=None):
+    def next_frame(self, action_p1, action_p2, window=None,degree=None):
 
         map_clone = self.map()
 
@@ -182,13 +218,16 @@ class Game:
             map_clone[pp.position[0], pp.position[1]] = pp.body()
 
         for id, pp in enumerate(self.pps):
+
             if type(pp.player) == type(ACPlayer()):
                 (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, action[id])
 
-                if self.mode == "ice":
+                if self.mode == "ice" or self.mode =="temper":
                     if pp.position[0] >= 0 and pp.position[1] >= 0 and \
                             pp.position[0] < self.width and pp.position[1] < self.height:
-                        if random.random() <= slide:
+                        rate = slide if self.mode =="ice" else self.get_rate()
+
+                        if random.random() <= rate:
 
                             if(id==0):
                                 self.history[-1].player_one_direction = self.pps[0].player.direction
@@ -203,10 +242,12 @@ class Game:
 
                 (pp.position, pp.player.direction) = pp.player.next_position_and_direction(pp.position, id + 1,self.map())
 
-                if self.mode=="ice":
+                if self.mode=="ice" or self.mode =="temper":
                     if pp.position[0] >= 0 and pp.position[1] >= 0 and \
                             pp.position[0] < self.width and pp.position[1] < self.height:
-                        if random.random() <= slide:
+                        rate = slide if self.mode == "ice" else self.get_rate()
+
+                        if random.random() <= rate:
                             if (id == 0):
                                 self.history.append(HistoryElement(map_clone, None, self.pps[1].player.direction))
                                 self.history[-1].player_one_direction = self.pps[0].player.direction
@@ -221,9 +262,7 @@ class Game:
         self.history[-1].player_one_direction = self.pps[0].player.direction
         self.history[-1].player_two_direction = self.pps[1].player.direction
 
-
-
-
+        self.change_degree()
 
         for (id, pp) in enumerate(self.pps):
             if pp.position[0] < 0 or pp.position[1] < 0 or \
@@ -298,7 +337,7 @@ class Game:
 
             self.done = True
 
-        return self.next_p1,  self.next_p2,  self.done#,0,0
+        return self.next_p1,  self.next_p2,  self.done  #,0,0
 
     def main_loop(self,model, pop=None,window=None,model2=None,condition=None):
 
@@ -337,8 +376,10 @@ class Game:
                             action2 = model2.act(torch.tensor(np.expand_dims(pop(map.state_for_player(2)), axis=0)).float())
 
                 else:
-                    action1 = model.act(torch.tensor(np.expand_dims(pop(map.state_for_player(1)), axis=0)).float())
-                    action2 = model2.act(torch.tensor(np.expand_dims(pop(map.state_for_player(2)), axis=0)).float())
+                    # action1 = model.act(torch.tensor(np.expand_dims(pop(map.state_for_player(1)), axis=0)).float())
+                    # action2 = model2.act(torch.tensor(np.expand_dims(pop(map.state_for_player(2)), axis=0)).float())
+                    action1 = model.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(1)),np.expand_dims(np.array(self.prob_map()),axis=0)),axis=0), axis=0)).float())
+                    action2 = model2.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(2)), np.expand_dims(np.array(self.prob_map()),axis=0)), axis=0),axis=0)).float())
 
 
             if not self.next_frame(action1,action2,window):

@@ -5,6 +5,7 @@ from config import *
 from tron.game import *
 from tron.minimax import MinimaxPlayer
 from tron.player import KeyboardPlayer,ACPlayer
+from config import *
 
 
 def pop_up(map):
@@ -34,7 +35,14 @@ def pop_up(map):
     my=torch.from_numpy(my)
 
     return np.concatenate((wall,my,ener),axis=0)
+def prob_map(x):
 
+    temp=np.zeros((MAP_WIDTH+2,MAP_HEIGHT+2))
+
+    for i in range(MAP_HEIGHT+2):
+        for j in range(MAP_WIDTH+2):
+               temp[i][j]=x
+    return temp
 def make_game(p1,p2,mode=None):
 
     if mode == "fair":
@@ -72,7 +80,7 @@ def make_game(p1,p2,mode=None):
 
     game = Game(MAP_WIDTH, MAP_HEIGHT, [
         PositionPlayer(1,  ACPlayer() if p1 else MinimaxPlayer(2, "voronoi"), [x1, y1]),
-        PositionPlayer(2,  ACPlayer() if p2 else MinimaxPlayer(2, "voronoi"), [x2, y2])],"ice")
+        PositionPlayer(2,  ACPlayer() if p2 else MinimaxPlayer(2, "voronoi"), [x2, y2])],"temper")
     return game
 
 
@@ -84,4 +92,3 @@ def get_reward(game, constants):
             return constants[0], constants[1]
     else:
             return constants[1], constants[0]
-

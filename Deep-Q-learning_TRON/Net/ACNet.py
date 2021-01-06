@@ -78,7 +78,7 @@ class Net(nn.Module):
 
         x = torch.cat([x_1x1,x_iconv1,x_iconv2,x_iconv3,x_iconv4,x_pool],1)
         x = self.pool(x)
-        x=self.activation(self.conv6(x))
+        x = self.activation(self.conv6(x))
         x = self.pool2(x)
 
         # print(x.size())
@@ -115,7 +115,11 @@ class Net(nn.Module):
         value, actor_output = self(x)
 
         return value
+    def get_rate(self,x):
 
+        _,_,rate=self(x)
+
+        return rate
     def evaluate_actions(self, x, actions):
         '''상태 x로부터 상태가치, 실제 행동 actions의 로그 확률, 엔트로피를 계산'''
         value, actor_output = self(x)
@@ -215,7 +219,7 @@ class Net3(Net):
     def __init__(self):
         super(Net, self).__init__()
 
-        self.conv1 = nn.Conv2d(3, 32, 3,padding=1)
+        self.conv1 = nn.Conv2d(4, 32, 3,padding=1)
 
         self.conv2 = nn.Conv2d(32, 32, 3,padding=1)
         self.conv3 = nn.Conv2d(32, 32, 3,padding=1)

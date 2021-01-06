@@ -24,10 +24,11 @@ class RolloutStorage(object):
     def __init__(self, num_steps, num_processes):
 
         # self.observations = torch.zeros(num_steps + 1, num_processes,3,12,12)
-        self.observations = torch.zeros(num_steps + 1, num_processes, 3, MAP_WIDTH+2, MAP_HEIGHT+2)
+        self.observations = torch.zeros(num_steps + 1, num_processes, 4, MAP_WIDTH+2, MAP_HEIGHT+2)
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
         self.actions = torch.zeros(num_steps, num_processes, 1).long()
+
 
         # 할인 총보상 저장
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
@@ -81,7 +82,7 @@ class Brain(object):
         num_processes = NUM_PROCESSES
 
         values, action_log_probs, entropy = self.actor_critic.evaluate_actions(
-            rollouts.observations[:-1].view(-1, 3, MAP_WIDTH+2, MAP_HEIGHT+2).to(device).detach(),
+            rollouts.observations[:-1].view(-1, 4, MAP_WIDTH+2, MAP_HEIGHT+2).to(device).detach(),
             rollouts.actions.view(-1, 1).to(device).detach())
 
         # 주의 : 각 변수의 크기
@@ -188,6 +189,7 @@ def train(args):
     reward_np1 = np.zeros([NUM_PROCESSES, 1])  # Numpy 배열
     each_step1 = np.zeros(NUM_PROCESSES)  # 각 환경의 단계 수를 기록
 
+
     rollouts2 = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES)  # rollouts 객체
     episode_rewards2 = torch.zeros([NUM_PROCESSES, 1])  # 현재 에피소드의 보상
     obs_np2 = np.zeros([NUM_PROCESSES, MAP_WIDTH+2,MAP_HEIGHT+2])  # Numpy 배열 # 게임 상황이 12x12임
@@ -212,9 +214,14 @@ def train(args):
 
     current_obs2 = obs2  # 가장 최근의 obs를 저장
 
+    degree_map = [envs[i].prob_map() for i in range(NUM_PROCESSES)]
+    degree_map=torch.tensor(degree_map).unsqueeze(1)
+
     # advanced 학습에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
-    rollouts1.observations[0].copy_(current_obs1)
-    rollouts2.observations[0].copy_(current_obs2)
+
+    rollouts1.observations[0].copy_(torch.cat([current_obs1,degree_map],dim=1))
+    rollouts2.observations[0].copy_(torch.cat([current_obs2,degree_map],dim=1))
+
     gamecount = 0
     losscount = 0
     duration = 0
@@ -269,6 +276,8 @@ def train(args):
 
                     obs_np1[i] = envs[i].map().state_for_player(1)
                     obs_np2[i] = envs[i].map().state_for_player(2)
+
+
                     each_step1[i] = 0
                     each_step2[i] = 0
                 else:
@@ -296,6 +305,14 @@ def train(args):
 
             obs1 = torch.tensor(np.array(obs1))
             obs2 = torch.tensor(np.array(obs2))
+
+
+            degree_map = [envs[i].prob_map() for i in range(NUM_PROCESSES)]
+            degree_map = torch.tensor(degree_map).unsqueeze(1)
+
+            # advanced 학습에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
+            obs1=torch.cat([obs1, degree_map], dim=1)
+            obs2=torch.cat([obs2, degree_map], dim=1)
 
             current_obs1 = obs1  # 최신 상태의 obs를 저장
             current_obs2 = obs2  # 최신 상태의 obs를 저장
@@ -361,17 +378,17 @@ def train(args):
             writer.add_scalar('Action log probability', prob1_loss_sum1, losscount)
             writer.add_scalar('Advantage', advan_loss_sum1, losscount)
 
-            if losscount%200 == 0:
-                for i in range(PLAY_WITH_MINIMAX):
-                    game = make_game(True, False,"fair")
-                    game.main_loop(global_brain.actor_critic, pop_up)
-
-                    if game.winner == 1:
-                        p1_win += 1
-                    elif game.winner is None:
-                        game_draw += 1
-
-                writer.add_scalar('minimax rating', p1_win/(PLAY_WITH_MINIMAX - game_draw), losscount)
+            # if losscount%200 == 0:
+            #     for i in range(PLAY_WITH_MINIMAX):
+            #         game = make_game(True, False,"fair")
+            #         game.main_loop(global_brain.actor_critic, pop_up)
+            #
+            #         if game.winner == 1:
+            #             p1_win += 1
+            #         elif game.winner is None:
+            #             game_draw += 1
+            #
+            #     writer.add_scalar('minimax rating', p1_win/(PLAY_WITH_MINIMAX - game_draw), losscount)
 
             p1_win = 0
             game_draw = 0

@@ -50,12 +50,12 @@ def main(args):
     iter=30
     actor_critic = Net3()  # 신경망 객체 생성
     global_brain = Brain(actor_critic,args, acktr=True)
-    # global_brain.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player1model1_reword3.bak'))
+    # global_brain.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3model3_reword3_ice_retest.bak'))
     # global_brain.actor_critic.eval()
 
     actor_critic2 = Net3()  # 신경망 객체 생성
     global_brain2 = Brain(actor_critic2,args, acktr=True)
-    # global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player1model1_reword3.bak'))
+    # global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3model3_reword3_ice_retest.bak'))
     # global_brain2.actor_critic.eval()
 
     # DQN=DQNNET()
@@ -84,7 +84,7 @@ def main(args):
         print("Player 1:{} \n Player 2:{}\n ".format(p1_win,p2_win))
     else:
         while True:
-            game = make_game(False, False,"fair")
+            game = make_game(False, False)
             pygame.mouse.set_visible(False)
 
             window = Window(game, 40)
