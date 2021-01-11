@@ -24,23 +24,25 @@ class RolloutStorage(object):
     def __init__(self, num_steps, num_processes):
 
         # self.observations = torch.zeros(num_steps + 1, num_processes,3,12,12)
-        self.observations = torch.zeros(num_steps + 1, num_processes, 4, MAP_WIDTH+2, MAP_HEIGHT+2)
+        self.observations = torch.zeros(num_steps + 1, num_processes, 3, MAP_WIDTH+2, MAP_HEIGHT+2)
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
         self.actions = torch.zeros(num_steps, num_processes, 1).long()
+        self.probs=torch.zeros(num_steps,num_processes).float()
 
 
         # 할인 총보상 저장
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
         self.index = 0  # insert할 인덱스
 
-    def insert(self, current_obs, action, reward, mask):
+    def insert(self, current_obs, action, reward, mask,probs):
         '''현재 인덱스 위치에 transition을 저장'''
 
         self.observations[self.index + 1].copy_(current_obs)
         self.masks[self.index + 1].copy_(mask)
         self.rewards[self.index].copy_(reward)
         self.actions[self.index].copy_(action)
+        self.probs[self.index].copy_(probs)
         self.index = (self.index + 1) % NUM_ADVANCED_STEP  # 인덱스 값 업데이트
 
     def after_update(self):
@@ -82,8 +84,8 @@ class Brain(object):
         num_processes = NUM_PROCESSES
 
         values, action_log_probs, entropy = self.actor_critic.evaluate_actions(
-            rollouts.observations[:-1].view(-1, 4, MAP_WIDTH+2, MAP_HEIGHT+2).to(device).detach(),
-            rollouts.actions.view(-1, 1).to(device).detach())
+            rollouts.observations[:-1].view(-1, 3, MAP_WIDTH+2, MAP_HEIGHT+2).to(device).detach(),
+            rollouts.actions.view(-1, 1).to(device).detach(),rollouts.probs.view(-1).detach())
 
         # 주의 : 각 변수의 크기
 
@@ -166,7 +168,7 @@ def train(args):
     r = "1" if args.r is None else args.r
     unique= "" if args.u is None else args.u
 
-    envs = [make_game(ai_p1,ai_p2) for i in range(NUM_PROCESSES)]
+    envs = [make_game(ai_p1,ai_p2,gamemode="ice") for i in range(NUM_PROCESSES)]
 
     eventid = datetime.now().strftime('runs/ACKTR-%Y%m-%d%H-%M%S-ent ') + str(entropy_coef) + '-pol ' + p + '-val ' + v + '-step' + str(
         NUM_ADVANCED_STEP) + '-process ' + str(NUM_PROCESSES) + unique + '-model ' + m + '-reward ' + r
@@ -179,9 +181,14 @@ def train(args):
     elif args.m == "3":
         actor_critic = Net3()
     else:
-        actor_critic = Net3()
+        actor_critic = Net2()
 
     global_brain = Brain(actor_critic,args, acktr=True)
+
+    ACNET2 = Net2()
+    global_brain2 = Brain(ACNET2, args, acktr=True)
+    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2test_probs4_ice_0.15.bak'))
+    global_brain2.actor_critic.eval()
 
     rollouts1 = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES)  # rollouts 객체
     episode_rewards1 = torch.zeros([NUM_PROCESSES, 1])  # 현재 에피소드의 보상
@@ -214,14 +221,17 @@ def train(args):
 
     current_obs2 = obs2  # 가장 최근의 obs를 저장
 
-    degree_map = [envs[i].prob_map() for i in range(NUM_PROCESSES)]
-    degree_map=torch.tensor(degree_map).unsqueeze(1)
+    # degree_map = [envs[i].prob_map() for i in range(NUM_PROCESSES)]
+    # degree_map=torch.tensor(degree_map).unsqueeze(1)
 
     # advanced 학습에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
 
-    rollouts1.observations[0].copy_(torch.cat([current_obs1,degree_map],dim=1))
-    rollouts2.observations[0].copy_(torch.cat([current_obs2,degree_map],dim=1))
+    # rollouts1.observations[0].copy_(torch.cat([current_obs1,degree_map],dim=1))
+    # rollouts2.observations[0].copy_(torch.cat([current_obs2,degree_map],dim=1))
 
+
+    rollouts1.observations[0].copy_(current_obs1)
+    rollouts2.observations[0].copy_(current_obs2)
     gamecount = 0
     losscount = 0
     duration = 0
@@ -240,9 +250,10 @@ def train(args):
         # advanced 학습 대상이 되는 각 단계에 대해 계산
         for step in range(NUM_ADVANCED_STEP):
             # 행동을 선택
+            probs=[envs[i].get_rate() for i in range(NUM_PROCESSES)]
             with torch.no_grad():
-                action1 = actor_critic.act(rollouts1.observations[step])
-                action2 = actor_critic.act(rollouts2.observations[step])
+                action1 = actor_critic.act(rollouts1.observations[step],probs)
+                action2 = actor_critic.act(rollouts2.observations[step],probs)
 
             # (32,1)→(32,) -> tensor를 NumPy변수로
 
@@ -268,11 +279,11 @@ def train(args):
                         duration += each_step1[i]
 
                         if gamecount % SHOW_ITER == 0:
-                            print('%d Episode: Finished after %d steps' % (gamecount, each_step1[i]))
+                            print('%d Episode: Finished after %d steps' % (gamecount, float(duration/SHOW_ITER)))
                             writer.add_scalar('Duration', duration/SHOW_ITER, gamecount)
                             duration = 0
 
-                    envs[i] = make_game(ai_p1,ai_p2)
+                    envs[i] = make_game(ai_p1,ai_p2,gamemode="temper")
 
                     obs_np1[i] = envs[i].map().state_for_player(1)
                     obs_np2[i] = envs[i].map().state_for_player(2)
@@ -307,27 +318,28 @@ def train(args):
             obs2 = torch.tensor(np.array(obs2))
 
 
-            degree_map = [envs[i].prob_map() for i in range(NUM_PROCESSES)]
-            degree_map = torch.tensor(degree_map).unsqueeze(1)
+            # degree_map = [envs[i].prob_map() for i in range(NUM_PROCESSES)]
+            # degree_map = torch.tensor(degree_map).unsqueeze(1)
 
             # advanced 학습에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
-            obs1=torch.cat([obs1, degree_map], dim=1)
-            obs2=torch.cat([obs2, degree_map], dim=1)
+
+            # obs1=torch.cat([obs1, degree_map], dim=1)
+            # obs2=torch.cat([obs2, degree_map], dim=1)
 
             current_obs1 = obs1  # 최신 상태의 obs를 저장
             current_obs2 = obs2  # 최신 상태의 obs를 저장
 
             # 메모리 객체에 현 단계의 transition을 저장
-            rollouts1.insert(current_obs1, action1.data, reward1, masks)
-            rollouts2.insert(current_obs2, action2.data, reward2, masks)
+            rollouts1.insert(current_obs1, action1.data, reward1, masks,torch.tensor(probs))
+            rollouts2.insert(current_obs2, action2.data, reward2, masks,torch.tensor(probs))
 
         # advanced 학습 for문 끝
 
         # advanced 학습 대상 중 마지막 단계의 상태로 예측하는 상태가치를 계산
 
         with torch.no_grad():
-            next_value1 = actor_critic.get_value(rollouts1.observations[-1])
-            next_value2 = actor_critic.get_value(rollouts2.observations[-1])
+            next_value1 = actor_critic.get_value(rollouts1.observations[-1],probs)
+            next_value2 = actor_critic.get_value(rollouts2.observations[-1],probs)
             # rollouts.observations의 크기는 torch.Size([6, 32, 4])
 
         # 모든 단계의 할인총보상을 계산하고, rollouts의 변수 returns를 업데이트
@@ -368,6 +380,7 @@ def train(args):
             if total_loss_sum1 < min_loss:
                 min_loss = act_loss_sum1
 
+
             torch.save(global_brain.actor_critic.state_dict(), 'save/' + 'ACKTR_player'+m + unique +'.bak')
             # torch.save(global_brain2.actor_critic.state_dict(), 'ais/a3c/' + 'player_2.bak')
 
@@ -378,17 +391,18 @@ def train(args):
             writer.add_scalar('Action log probability', prob1_loss_sum1, losscount)
             writer.add_scalar('Advantage', advan_loss_sum1, losscount)
 
-            # if losscount%200 == 0:
-            #     for i in range(PLAY_WITH_MINIMAX):
-            #         game = make_game(True, False,"fair")
-            #         game.main_loop(global_brain.actor_critic, pop_up)
-            #
-            #         if game.winner == 1:
-            #             p1_win += 1
-            #         elif game.winner is None:
-            #             game_draw += 1
-            #
-            #     writer.add_scalar('minimax rating', p1_win/(PLAY_WITH_MINIMAX - game_draw), losscount)
+            if losscount%200 == 0:
+                for i in range(PLAY_WITH_MINIMAX):
+                    game = make_game(True, True,mode="fair",gamemode="temper")
+
+                    game.main_loop(global_brain.actor_critic, pop=pop_up,model2=global_brain2.actor_critic)
+
+                    if game.winner == 1:
+                        p1_win += 1
+                    elif game.winner is None:
+                        game_draw += 1
+
+                writer.add_scalar('minimax rating', p1_win/(PLAY_WITH_MINIMAX - game_draw), losscount)
 
             p1_win = 0
             game_draw = 0

@@ -2,9 +2,9 @@ import torch
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-GAMMA = 0.7  # 시간할인율
+GAMMA = 0.9  # 시간할인율
 #DDQN
-BATCH_SIZE=32
+BATCH_SIZE=64
 
 
 lr = 3e-3
@@ -29,7 +29,7 @@ PLAY_WITH_MINIMAX=50
 
 # 리워드 function
 
-slide=0.3
+slide=0.15
 
 # win, lose, win_separated, win_length_factor
 

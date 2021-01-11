@@ -96,33 +96,29 @@ class Net(nn.Module):
 
         return critic_output, actor_output
 
-    def act(self, x):
+    def act(self, x,env_prob):
         '''상태 x로부터 행동을 확률적으로 결정'''
-        value, actor_output = self(x)
+        value, actor_output = self(x,env_prob)
         # actor_output=torch.clamp_min_(actor_output,min=0)
         # dim=1이므로 행동의 종류에 대해 softmax를 적용
         action_probs = F.softmax(actor_output, dim=1)
         action = action_probs.multinomial(num_samples=1)  # dim=1이므로 행동의 종류에 대해 확률을 계산
         return action
 
-    def deterministic_act(self, x):
+    def deterministic_act(self, x,env_prob):
         '''상태 x로부터 행동을 확률적으로 결정'''
-        value, actor_output = self(x)
+        value, actor_output = self(x,env_prob)
         return torch.argmax(actor_output, dim=1)
 
-    def get_value(self, x):
+    def get_value(self, x,env_prob):
         '''상태 x로부터 상태가치를 계산'''
-        value, actor_output = self(x)
+        value, actor_output = self(x,env_prob)
 
         return value
-    def get_rate(self,x):
 
-        _,_,rate=self(x)
-
-        return rate
-    def evaluate_actions(self, x, actions):
+    def evaluate_actions(self, x, actions,env_prob):
         '''상태 x로부터 상태가치, 실제 행동 actions의 로그 확률, 엔트로피를 계산'''
-        value, actor_output = self(x)
+        value, actor_output = self(x,env_prob)
 
         log_probs = F.log_softmax(actor_output, dim=1)  # dim=1이므로 행동의 종류에 대해 확률을 계산
         action_log_probs = log_probs.gather(1, actions.detach())  # 실제 행동의 로그 확률(log_probs)을 구함
@@ -140,73 +136,62 @@ class Net2(Net):
     def __init__(self):
         super(Net, self).__init__()
 
-        # self.inception=Inception3().cuda()
+        self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
 
+        self.conv2 = nn.Conv2d(32, 32, 3, padding=1)
+        self.conv3 = nn.Conv2d(32, 32, 3, padding=1)
 
+        self.conv4 = nn.Conv2d(32, 64, 3, padding=1)
 
-        self.conv1 = nn.Conv2d(3, 32, 5,padding=2)
+        self.conv5 = nn.Conv2d(64, 64, 3, padding=1)
+        self.conv6 = nn.Conv2d(64, 64, 3, padding=1)
 
-        self.conv2 = nn.Conv2d(32, 32, 5,padding=2)
-        self.conv3 = nn.Conv2d(32, 32, 5,padding=2)
+        self.pool = nn.AvgPool2d(kernel_size=3, padding=1, stride=2)
 
-        self.conv4 = nn.Conv2d(32, 32, (3,1), padding=(0,1))
-        self.conv5 = nn.Conv2d(32, 32, (1,3), padding=(1,0))
+        self.conv7 = nn.Conv2d(64, 64, 7, padding=3, stride=2)
 
-        self.pool=nn.AvgPool2d(kernel_size=2)
+        self.fc1 = nn.Linear(64 * 3 * 3, 256)
+        self.fc2 = nn.Linear(256, 128)
 
-        self.conv6=nn.Conv2d(32,64,7,padding=3)
-
-        self.pool2=nn.MaxPool2d(kernel_size=3,stride=2)
-
-
-
-        self.fc1 = nn.Linear(64*2*2, 2048)
-        self.fc2 = nn.Linear(2048, 1024)
-        self.fc3 = nn.Linear(1024, 256)
-        self.fc4 = nn.Linear(256, 128)
-
-        self.actor1 = nn.Linear(128, 64)
+        self.actor1 = nn.Linear(129, 64)
         self.actor2 = nn.Linear(64, 4)
 
-        self.critic1 = nn.Linear(128, 64)
+        self.critic1 = nn.Linear(129, 64)
         self.critic2 = nn.Linear(64, 16)
         self.critic3 = nn.Linear(16, 1)
 
-        self.dropout = nn.Dropout(p=0.4)
+        self.dropout = nn.Dropout(p=0.2)
         self.activation = self.mish
 
-        # self.activation=torch.tanh
-    def forward(self, x):
+    def forward(self, x,env_prob):
         '''신경망 순전파 계산을 정의'''
         x = x.to(device)
+        env_prob=torch.tensor(env_prob).unsqueeze(1).cuda()
 
         x = self.activation(self.conv1(x))
 
-        id=x
+        idx = x
 
         x = self.activation(self.conv2(x))
-        x = self.activation(self.conv3(x)+id)
+        x = self.activation(self.conv3(x) + idx)
 
+        x = self.activation(self.conv4(x))
+
+        idx = x
+
+        x = self.activation(self.conv5(x))
+        x = self.activation(self.conv6(x) + idx)
 
         x = self.pool(x)
 
-        id=x
+        x = self.activation(self.conv7(x))
 
-        x = self.activation(self.conv4(x))
-        x = self.activation(self.conv5(x)+id)
+        x = x.view(-1, 64 * 3 * 3)
 
-        x = self.activation(self.conv6(x))
-        x = self.pool2(x)
-
-        # x = self.inception(x)
-
-        # print(x.size())
-
-        x = x.view(-1, 64*2*2)
         x = self.dropout(self.activation(self.fc1(x)))
         x = self.dropout(self.activation(self.fc2(x)))
-        x = self.dropout(self.activation(self.fc3(x)))
-        x = self.dropout(self.activation(self.fc4(x)))
+
+        x=torch.cat([x,env_prob],1)
 
         actor_output = self.actor2(self.activation(self.actor1(x)))
 

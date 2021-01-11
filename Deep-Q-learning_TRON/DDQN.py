@@ -5,6 +5,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from tron.util import *
 from Net.DQNNet import Net
+from config import *
 
 # General parameters
 folderName = 'survivor'
@@ -12,8 +13,6 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Net parameters
 
-BATCH_SIZE = 64
-GAMMA = 0.9 # Discount factor
 
 # Exploration parameters
 EPSILON_START = 1
@@ -22,9 +21,6 @@ DECAY_RATE = 0.999
 TAU = 0.001
 
 # Map parameters
-MAP_WIDTH = 10
-MAP_HEIGHT = 10
-
 
 # Memory parameters
 MEM_CAPACITY = int(1e5)
@@ -240,69 +236,27 @@ def train():
             cycle_step += 1
             changeAi += 1
 
-            '''
-            if(game_counter<start_mini):
-                changeAi=0
-
-            
-            if (changeAi > minimax_match):
-
-                if (mini):
-                    minimax_match = 11000 - minimax_match
-                    mini = False
-
-                else:
-                    duel_mini=False
-                    if not(play_with_minimax==0):
-                        rate =  win_p1 / play_with_minimax
-                    print(rate)
-                    if(rate>0.7):
-                        print("do i win?")
-                        break;
-                    minimax_match = (10000 * rate) + defalt_match
-                    mini = True
-                    play_with_minimax=0
-
-                changeAi = 0
-            '''
-
-            # Initialize the starting positions
-            x1 = random.randint(0, MAP_WIDTH-1)
-            y1 = random.randint(0, MAP_HEIGHT-1)
-            x2 = random.randint(0, MAP_WIDTH-1)
-            y2 = random.randint(0, MAP_HEIGHT-1)
-
-            while x1 == x2 and y1 == y2:
-                x1 = random.randint(0, MAP_WIDTH-1)
-                y1 = random.randint(0, MAP_HEIGHT-1)
-            # Initialize the game
-
-            player1 = ACPlayer()
-            player2 = ACPlayer()
-            #
-            game = Game(MAP_WIDTH,MAP_HEIGHT, [
-                PositionPlayer(1,player1, [x1, y1]),
-                PositionPlayer(2,player2, [x2, y2]),])
+            game=make_game(True,True)
 
             # Get the initial state for each player
 
-            # old_state_p1 = game.map().state_for_player(1)
-            # old_state_p1 = pop_up(old_state_p1)
-            # old_state_p1 = np.reshape(old_state_p1, (1, -1, old_state_p1.shape[1], old_state_p1.shape[2]))
-            # old_state_p1 = torch.from_numpy(old_state_p1).float()
-
             old_state_p1 = game.map().state_for_player(1)
-            old_state_p1 = np.reshape(old_state_p1, (1, 1, old_state_p1.shape[0], old_state_p1.shape[1]))
+            old_state_p1 = pop_up(old_state_p1)
+            old_state_p1 = np.reshape(old_state_p1, (1, -1, old_state_p1.shape[1], old_state_p1.shape[2]))
             old_state_p1 = torch.from_numpy(old_state_p1).float()
 
-            # old_state_p2 = game.map().state_for_player(2)
-            # old_state_p2 = pop_up(old_state_p2)
-            # old_state_p2 = np.reshape(old_state_p2, (1, -1, old_state_p2.shape[1], old_state_p2.shape[2]))
-            # old_state_p2 = torch.from_numpy(old_state_p2).float()
+            # old_state_p1 = game.map().state_for_player(1)
+            # old_state_p1 = np.reshape(old_state_p1, (1, 1, old_state_p1.shape[0], old_state_p1.shape[1]))
+            # old_state_p1 = torch.from_numpy(old_state_p1).float()
 
             old_state_p2 = game.map().state_for_player(2)
-            old_state_p2 = np.reshape(old_state_p2, (1, 1, old_state_p2.shape[0], old_state_p2.shape[1]))
+            old_state_p2 = pop_up(old_state_p2)
+            old_state_p2 = np.reshape(old_state_p2, (1, -1, old_state_p2.shape[1], old_state_p2.shape[2]))
             old_state_p2 = torch.from_numpy(old_state_p2).float()
+            #
+            # old_state_p2 = game.map().state_for_player(2)
+            # old_state_p2 = np.reshape(old_state_p2, (1, 1, old_state_p2.shape[0], old_state_p2.shape[1]))
+            # old_state_p2 = torch.from_numpy(old_state_p2).float()
 
             done=False
             move = 0
@@ -313,24 +267,24 @@ def train():
                 p1_action = brain.action(old_state_p1)
                 p2_action = brain.action(old_state_p2)
 
-                p1_next_state, p1_reward,p2_next_state, p2_reward, done, _, _ = game.step(p1_action, p2_action)
+                p1_next_state, p2_next_state,done = game.step(p1_action, p2_action)
 
                 move_counter += 1
                 move += 1
 
-                # p1_next_state = pop_up(p1_next_state)
-                # p1_next_state = np.reshape(p1_next_state, (1, -1, p1_next_state.shape[1], p1_next_state.shape[2]))
-                # p1_next_state = torch.from_numpy(p1_next_state).float()
-
-                # p2_next_state = pop_up(p2_next_state)
-                # p2_next_state = np.reshape(p2_next_state, (1, -1, p2_next_state.shape[1], p2_next_state.shape[2]))
-                # p2_next_state = torch.from_numpy(p2_next_state).float()
-
-                p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
+                p1_next_state = pop_up(p1_next_state)
+                p1_next_state = np.reshape(p1_next_state, (1, -1, p1_next_state.shape[1], p1_next_state.shape[2]))
                 p1_next_state = torch.from_numpy(p1_next_state).float()
 
-                p2_next_state = np.reshape(p2_next_state, (1, 1, p2_next_state.shape[0], p2_next_state.shape[1]))
+                p2_next_state = pop_up(p2_next_state)
+                p2_next_state = np.reshape(p2_next_state, (1, -1, p2_next_state.shape[1], p2_next_state.shape[2]))
                 p2_next_state = torch.from_numpy(p2_next_state).float()
+
+                # p1_next_state = np.reshape(p1_next_state, (1, 1, p1_next_state.shape[0], p1_next_state.shape[1]))
+                # p1_next_state = torch.from_numpy(p1_next_state).float()
+                #
+                # p2_next_state = np.reshape(p2_next_state, (1, 1, p2_next_state.shape[0], p2_next_state.shape[1]))
+                # p2_next_state = torch.from_numpy(p2_next_state).float()
 
                 if done:
 
@@ -346,6 +300,9 @@ def train():
                     else:
                         p1_reward = -100
                         p2_reward = 100
+                else:
+                    p1_reward = -1
+                    p2_reward = -1
 
                 brain.step(old_state_p1, p1_action, p1_reward, p1_next_state, done)
                 brain.step(old_state_p2, p2_action, p2_reward, p2_next_state, done)
