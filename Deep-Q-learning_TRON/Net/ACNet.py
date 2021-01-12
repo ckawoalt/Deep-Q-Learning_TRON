@@ -166,7 +166,8 @@ class Net2(Net):
     def forward(self, x,env_prob):
         '''신경망 순전파 계산을 정의'''
         x = x.to(device)
-        env_prob=torch.tensor(env_prob).unsqueeze(1).cuda()
+
+        env_prob=env_prob.unsqueeze(1).detach().cuda()
 
         x = self.activation(self.conv1(x))
 

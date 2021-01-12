@@ -48,15 +48,15 @@ def main(args):
     pygame.init()
     rating=False
     iter=30
-    actor_critic = Net3()  # 신경망 객체 생성
+    actor_critic = Net2()  # 신경망 객체 생성
     global_brain = Brain(actor_critic,args, acktr=True)
-    # global_brain.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3model3_reword3_ice_retest.bak'))
-    # global_brain.actor_critic.eval()
+    global_brain.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2dinamic_mode_ice_vs_0.15_using_prob.bak'))
+    global_brain.actor_critic.eval()
 
-    actor_critic2 = Net3()  # 신경망 객체 생성
+    actor_critic2 = Net2()  # 신경망 객체 생성
     global_brain2 = Brain(actor_critic2,args, acktr=True)
-    # global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3model3_reword3_ice_retest.bak'))
-    # global_brain2.actor_critic.eval()
+    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2dinamic_mode_ice_vs_0.15_using_prob.bak'))
+    global_brain2.actor_critic.eval()
 
     # DQN=DQNNET()
     # DQN.load_state_dict(torch.load(folderName+'/DDQN.bak'))
@@ -68,11 +68,11 @@ def main(args):
         p2_win = 0
 
         for i in range(iter):
-            game = make_game(False, False,"fair")
+            game = make_game(True, True,mode="fair",gamemode="ice")
             pygame.mouse.set_visible(False)
             window = None
 
-            game.main_loop(global_brain.actor_critic, pop_up, window, global_brain.actor_critic, ("AC", "DQN"))
+            game.main_loop(model=global_brain.actor_critic, pop=pop_up, window=window, model2=global_brain.actor_critic)
 
             if game.winner is None:
                 nullgame+=1
@@ -84,12 +84,12 @@ def main(args):
         print("Player 1:{} \n Player 2:{}\n ".format(p1_win,p2_win))
     else:
         while True:
-            game = make_game(False, False)
+            game = make_game(True, True,mode="fair",gamemode="temper")
             pygame.mouse.set_visible(False)
 
             window = Window(game, 40)
 
-            game.main_loop(global_brain.actor_critic,pop_up,window,global_brain2.actor_critic)
+            game.main_loop(model=global_brain.actor_critic,pop=pop_up,window=window,model2=global_brain2.actor_critic)
             print_game_results(game)
 
 

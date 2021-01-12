@@ -90,16 +90,7 @@ class Game:
 
     def get_rate(self):
 
-        if self.degree>15:
-            rate=0.1
-        elif self.degree > 0:
-            rate=0.2
-        elif self.degree > -15:
-            rate = 0.3
-        else:
-            rate = 0.4
-
-        return rate
+        return ((self.degree-30)/100) ** 2
 
     def get_degree(self):
 
@@ -112,8 +103,8 @@ class Game:
             self.degree=min(30,temp)
 
         else:
-            temp=self.degree-random.randint(0,3)
-            self.degree=max(-20,temp)
+            temp=self.degree-random.randint(1,5)
+            self.degree=max(-30,temp)
 
     def prob_map(self):
 
@@ -227,7 +218,8 @@ class Game:
 
                 if self.mode == "ice" or self.mode =="temper":
                     if pp.position[0] >= 0 and pp.position[1] >= 0 and \
-                            pp.position[0] < self.width and pp.position[1] < self.height:
+                            pp.position[0] < self.width and pp.position[1] < self.height and map_clone[pp.position[0], pp.position[1]] is Tile.EMPTY:
+
                         rate = slide if self.mode =="ice" else self.get_rate()
 
                         if random.random() <= rate:
@@ -247,10 +239,11 @@ class Game:
 
                 if self.mode=="ice" or self.mode =="temper":
                     if pp.position[0] >= 0 and pp.position[1] >= 0 and \
-                            pp.position[0] < self.width and pp.position[1] < self.height:
+                            pp.position[0] < self.width and pp.position[1] < self.height and map_clone[pp.position[0], pp.position[1]] is Tile.EMPTY:
                         rate = slide if self.mode == "ice" else self.get_rate()
 
                         if random.random() <= rate:
+
                             if (id == 0):
                                 self.history.append(HistoryElement(map_clone, None, self.pps[1].player.direction))
                                 self.history[-1].player_one_direction = self.pps[0].player.direction
@@ -325,8 +318,7 @@ class Game:
         if not self.next_frame(action_p1, action_p2):
             self.done = True
 
-            return self.next_p1, self.next_p2, self.done #,self.loser_len,self.winner_len
-
+            return self.next_p1, self.next_p2, self.done
         for pp in self.pps:
             if pp.alive:
                 alive_count += 1
@@ -340,9 +332,9 @@ class Game:
 
             self.done = True
 
-        return self.next_p1,  self.next_p2,  self.done  #,0,0
+        return self.next_p1,  self.next_p2,  self.done
 
-    def main_loop(self,model, pop=None,window=None,model2=None,condition=None):
+    def main_loop(self,model, pop=None,window=None,model2=None):
 
         if window:
             window.render_map(self.map())
@@ -359,30 +351,22 @@ class Game:
 
             map=self.map()
 
-            if(pop == None):
-                with torch.no_grad():
-                    action1 = model.act(torch.tensor(np.reshape(map.state_for_player(1), (1, 1, map.state_for_player(1).shape[0],
-                                                                                          map.state_for_player(1).shape[1]))).float(),self.get_rate())
-                    action2 = model2.act(torch.tensor(np.reshape(map.state_for_player(2), (1, 1, map.state_for_player(2).shape[0],
-                                                                                          map.state_for_player(2).shape[1]))).float(),self.get_rate())
+            #
+            # if(pop == None):
+            #     with torch.no_grad():
+            #         action1 = model.act(torch.tensor(np.reshape(map.state_for_player(1), (1, 1, map.state_for_player(1).shape[0],
+            #                                                                               map.state_for_player(1).shape[1]))).float(),self.get_rate())
+            #         action2 = model2.act(torch.tensor(np.reshape(map.state_for_player(2), (1, 1, map.state_for_player(2).shape[0],
+            #                                                                               map.state_for_player(2).shape[1]))).float(),self.get_rate())
+            #
+            # else:
 
-            else:
-                if(condition):
-                    with torch.no_grad():
-                        action1 = model.act(torch.tensor(np.expand_dims(pop(map.state_for_player(1)), axis=0)).float(),self.get_rate())
+            with torch.no_grad():
+                action1 = model.act(torch.tensor(pop(map.state_for_player(1))).unsqueeze(0).float(),torch.tensor([self.get_rate()]))
+                action2 = model2.act(torch.tensor(pop(map.state_for_player(2))).unsqueeze(0).float(),torch.tensor([self.get_rate()]))
 
-                        if condition[1]=="DQN":
-                            action2 = model2.act(
-                                torch.tensor(np.reshape(map.state_for_player(2), (1, 1, map.state_for_player(2).shape[0],
-                                                                                  map.state_for_player(2).shape[1]))).float(),self.get_rate())
-                        elif condition[1]=="AC":
-                            action2 = model2.act(torch.tensor(np.expand_dims(pop(map.state_for_player(2)), axis=0)).float(),self.get_rate())
-
-                else:
-                    action1 = model.act(torch.tensor(np.expand_dims(pop(map.state_for_player(1)), axis=0)).float(),[self.get_rate()])
-                    action2 = model2.act(torch.tensor(np.expand_dims(pop(map.state_for_player(2)), axis=0)).float(),[self.get_rate()])
-                    # action1 = model.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(1)),np.expand_dims(np.array(self.prob_map()),axis=0)),axis=0), axis=0)).float())
-                    # action2 = model2.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(2)), np.expand_dims(np.array(self.prob_map()),axis=0)), axis=0),axis=0)).float())
+                # action1 = model.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(1)),np.expand_dims(np.array(self.prob_map()),axis=0)),axis=0), axis=0)).float())
+                # action2 = model2.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(2)), np.expand_dims(np.array(self.prob_map()),axis=0)), axis=0),axis=0)).float())
 
 
             if not self.next_frame(action1,action2,window):

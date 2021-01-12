@@ -162,6 +162,7 @@ def train(args):
 
     ai_p1=True
     ai_p2=True
+
     p= "1" if args.p is None else args.p
     v = "1" if args.v is None else args.v
     m = "1" if args.m is None else args.m
@@ -251,6 +252,8 @@ def train(args):
         for step in range(NUM_ADVANCED_STEP):
             # 행동을 선택
             probs=[envs[i].get_rate() for i in range(NUM_PROCESSES)]
+            probs = torch.tensor(probs)
+
             with torch.no_grad():
                 action1 = actor_critic.act(rollouts1.observations[step],probs)
                 action2 = actor_critic.act(rollouts2.observations[step],probs)
@@ -283,7 +286,7 @@ def train(args):
                             writer.add_scalar('Duration', duration/SHOW_ITER, gamecount)
                             duration = 0
 
-                    envs[i] = make_game(ai_p1,ai_p2,gamemode="temper")
+                    envs[i] = make_game(ai_p1,ai_p2,gamemode="ice")
 
                     obs_np1[i] = envs[i].map().state_for_player(1)
                     obs_np2[i] = envs[i].map().state_for_player(2)
@@ -330,8 +333,9 @@ def train(args):
             current_obs2 = obs2  # 최신 상태의 obs를 저장
 
             # 메모리 객체에 현 단계의 transition을 저장
-            rollouts1.insert(current_obs1, action1.data, reward1, masks,torch.tensor(probs))
-            rollouts2.insert(current_obs2, action2.data, reward2, masks,torch.tensor(probs))
+            rollouts1.insert(current_obs1, action1.data, reward1, masks,probs)
+            rollouts2.insert(current_obs2, action2.data, reward2, masks,probs)
+
 
         # advanced 학습 for문 끝
 
@@ -358,15 +362,6 @@ def train(args):
         prob1_loss_sum1 += prob1
         advan_loss_sum1 += advan1
 
-        # if(gamecount>2000):
-        #     pygame.init()
-        #     game = make_game(True, True)
-        #     pygame.mouse.set_visible(False)
-        #
-        #     window = Window(game, 40)
-        #
-        #     game.main_loop(global_brain.actor_critic, pop_up, window)
-
         if losscount%SHOW_ITER == 0:
             total_loss_sum1 = total_loss_sum1 / SHOW_ITER
             val_loss_sum1 = val_loss_sum1 / SHOW_ITER
@@ -382,7 +377,6 @@ def train(args):
 
 
             torch.save(global_brain.actor_critic.state_dict(), 'save/' + 'ACKTR_player'+m + unique +'.bak')
-            # torch.save(global_brain2.actor_critic.state_dict(), 'ais/a3c/' + 'player_2.bak')
 
             writer.add_scalar('Training loss', total_loss_sum1, losscount)
             writer.add_scalar('Value loss', val_loss_sum1, losscount)
@@ -396,6 +390,7 @@ def train(args):
                     game = make_game(True, True,mode="fair",gamemode="temper")
 
                     game.main_loop(global_brain.actor_critic, pop=pop_up,model2=global_brain2.actor_critic)
+                    # game.main_loop(global_brain.actor_critic, pop=pop_up)
 
                     if game.winner == 1:
                         p1_win += 1
