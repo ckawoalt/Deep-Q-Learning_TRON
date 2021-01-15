@@ -169,7 +169,7 @@ def train(args):
     r = "1" if args.r is None else args.r
     unique= "" if args.u is None else args.u
 
-    envs = [make_game(ai_p1,ai_p2,gamemode="ice") for i in range(NUM_PROCESSES)]
+    envs = [make_game(ai_p1,ai_p2,gamemode=GAME_MODE) for i in range(NUM_PROCESSES)]
 
     eventid = datetime.now().strftime('runs/ACKTR-%Y%m-%d%H-%M%S-ent ') + str(entropy_coef) + '-pol ' + p + '-val ' + v + '-step' + str(
         NUM_ADVANCED_STEP) + '-process ' + str(NUM_PROCESSES) + unique + '-model ' + m + '-reward ' + r
@@ -182,13 +182,13 @@ def train(args):
     elif args.m == "3":
         actor_critic = Net3()
     else:
-        actor_critic = Net2()
+        actor_critic = Net3()
 
     global_brain = Brain(actor_critic,args, acktr=True)
 
     ACNET2 = Net2()
     global_brain2 = Brain(ACNET2, args, acktr=True)
-    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2test_probs4_ice_0.15.bak'))
+    # global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2test_probs4_ice_0.15.bak'))
     global_brain2.actor_critic.eval()
 
     rollouts1 = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES)  # rollouts 객체
@@ -279,14 +279,14 @@ def train(args):
 
                     if i == 0:
                         gamecount += 1
-                        duration += each_step1[i]
+                        duration += each_step1[i] 
 
                         if gamecount % SHOW_ITER == 0:
                             print('%d Episode: Finished after %d steps' % (gamecount, float(duration/SHOW_ITER)))
                             writer.add_scalar('Duration', duration/SHOW_ITER, gamecount)
                             duration = 0
 
-                    envs[i] = make_game(ai_p1,ai_p2,gamemode="ice")
+                    envs[i] = make_game(ai_p1,ai_p2,gamemode=GAME_MODE)
 
                     obs_np1[i] = envs[i].map().state_for_player(1)
                     obs_np2[i] = envs[i].map().state_for_player(2)
@@ -295,8 +295,8 @@ def train(args):
                     each_step1[i] = 0
                     each_step2[i] = 0
                 else:
-                    reward_np1[i] = -1  # 그 외의 경우는 보상 -1 부여
-                    reward_np2[i] = -1
+                    reward_np1[i] = -1.0  # 그 외의 경우는 보상 -1 부여
+                    reward_np2[i] = -1.0
 
             # 보상을 tensor로 변환하고, 에피소드의 총보상에 더해줌
             reward1 = torch.from_numpy(reward_np1).float()
@@ -387,7 +387,7 @@ def train(args):
 
             if losscount%200 == 0:
                 for i in range(PLAY_WITH_MINIMAX):
-                    game = make_game(True, True,mode="fair",gamemode="temper")
+                    game = make_game(True, True,mode="fair",gamemode=GAME_MODE)
 
                     game.main_loop(global_brain.actor_critic, pop=pop_up,model2=global_brain2.actor_critic)
                     # game.main_loop(global_brain.actor_critic, pop=pop_up)
