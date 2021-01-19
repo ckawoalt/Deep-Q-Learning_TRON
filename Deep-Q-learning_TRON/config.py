@@ -30,11 +30,12 @@ PLAY_WITH_MINIMAX=200
 # 리워드 function
 
 slide=0.15
-
+# GAME_MODE="ice"
+GAME_MODE="temper"
 # win, lose, win_separated, win_length_factor
 
 reward_cons1 = [10, -10]
 
 reward_cons2 = [10, -20]
 
-reward_cons3 = [20, -10]
+reward_cons3 = [20.0, -10.0]

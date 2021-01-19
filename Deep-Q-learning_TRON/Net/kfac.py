@@ -39,7 +39,11 @@ def _extract_patches(x, kernel_size, stride, padding):
 
 
 def compute_cov_a(a, classname, layer_info, fast_cnn):
-    batch_size = a.size(0)
+
+    if classname == 'Bilinear':
+        batch_size = a[0].data.size(0)
+    else:
+        batch_size = a.size(0)
 
     if classname == 'Conv2d':
         if fast_cnn:
@@ -55,11 +59,19 @@ def compute_cov_a(a, classname, layer_info, fast_cnn):
         if is_cuda:
             a = a.cuda()
 
+    elif classname == 'Bilinear':
+        is_cuda = a[0].data.is_cuda
+        a = torch.ones(a[0].data.size(0),a[0].data.size(1)*a[1].data.size(1))
+        if is_cuda:
+            a = a.cuda()
+
+    # print(a.size(),classname)
     return a.t() @ (a / batch_size)
 
 
 def compute_cov_g(g, classname, layer_info, fast_cnn):
     batch_size = g.size(0)
+    # print(g.size(), "???")
 
     if classname == 'Conv2d':
         if fast_cnn:
@@ -68,10 +80,12 @@ def compute_cov_g(g, classname, layer_info, fast_cnn):
         else:
             g = g.transpose(1, 2).transpose(2, 3).contiguous()
             g = g.view(-1, g.size(-1)).mul_(g.size(1)).mul_(g.size(2))
-    elif classname == 'AddBias':
+    elif classname == 'AddBias' or classname == 'Bilinear':
         g = g.view(g.size(0), g.size(1), -1)
         g = g.sum(-1)
 
+
+    # print(g.size(),classname,"gradient")
     g_ = g * batch_size
     return g_.t() @ (g_ / g.size(0))
 
@@ -90,8 +104,8 @@ class SplitBias(nn.Module):
         self.add_bias = AddBias(module.bias.data)
         self.module.bias = None
 
-    def forward(self, input):
-        x = self.module(input)
+    def forward(self, *input):
+        x = self.module(*input)
         x = self.add_bias(x)
         return x
 
@@ -121,7 +135,7 @@ class KFACOptimizer(optim.Optimizer):
 
         super(KFACOptimizer, self).__init__(model.parameters(), defaults)
 
-        self.known_modules = {'Linear', 'Conv2d', 'AddBias'}
+        self.known_modules = {'Linear', 'Conv2d', 'AddBias','Bilinear'}
 
         self.modules = []
         self.grad_outputs = {}
@@ -161,12 +175,19 @@ class KFACOptimizer(optim.Optimizer):
                 layer_info = (module.kernel_size, module.stride,
                               module.padding)
 
-            aa = compute_cov_a(input[0].data, classname, layer_info,
+            # print(input,"data",classname)
+            if classname == 'Bilinear':
+                inputs= input
+            else:
+                inputs=input[0].data
+
+            aa = compute_cov_a(inputs, classname, layer_info,
                                self.fast_cnn)
 
             # Initialize buffers
             if self.steps == 0:
                 self.m_aa[module] = aa.clone()
+            # print(aa.size(),"aaaaaa")
 
             update_running_stat(aa, self.m_aa[module], self.stat_decay)
 
@@ -178,7 +199,6 @@ class KFACOptimizer(optim.Optimizer):
             if classname == 'Conv2d':
                 layer_info = (module.kernel_size, module.stride,
                               module.padding)
-
             gg = compute_cov_g(grad_output[0].data, classname, layer_info,
                                self.fast_cnn)
 
@@ -192,7 +212,7 @@ class KFACOptimizer(optim.Optimizer):
         for module in self.model.modules():
             classname = module.__class__.__name__
             if classname in self.known_modules:
-                assert not ((classname in ['Linear', 'Conv2d']) and module.bias is not None), \
+                assert not ((classname in ['Linear', 'Conv2d','Bilinear']) and module.bias is not None), \
                                     "You must have a bias as a separate layer"
 
                 self.modules.append(module)
@@ -217,18 +237,27 @@ class KFACOptimizer(optim.Optimizer):
             if self.steps % self.Tf == 0:
                 # My asynchronous implementation exists, I will add it later.
                 # Experimenting with different ways to this in PyTorch.
+                # print(self.m_aa[m].size(),"m_aa",classname)
                 self.d_a[m], self.Q_a[m] = torch.symeig(
                     self.m_aa[m], eigenvectors=True)
+                # print(self.Q_a[m].size(),"after maa")
                 self.d_g[m], self.Q_g[m] = torch.symeig(
                     self.m_gg[m], eigenvectors=True)
 
                 self.d_a[m].mul_((self.d_a[m] > 1e-6).float())
                 self.d_g[m].mul_((self.d_g[m] > 1e-6).float())
-
-            if classname == 'Conv2d':
+            # print(m)
+            # print(p.grad.size(), "grad")
+            if classname == 'Conv2d' or classname == 'Bilinear':
                 p_grad_mat = p.grad.data.view(p.grad.data.size(0), -1)
             else:
                 p_grad_mat = p.grad.data
+
+            # print(p_grad_mat.size(), "mat")
+            #
+            # print(self.Q_g[m].t().size())
+            # print(p_grad_mat.size())
+            # print(self.Q_a[m].size())
 
             v1 = self.Q_g[m].t() @ p_grad_mat @ self.Q_a[m]
             v2 = v1 / (
@@ -240,6 +269,7 @@ class KFACOptimizer(optim.Optimizer):
 
         vg_sum = 0
         for p in self.model.parameters():
+            # print(p)
             v = updates[p]
             vg_sum += (v * p.grad.data * self.lr * self.lr).sum()
 

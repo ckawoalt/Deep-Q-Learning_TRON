@@ -188,7 +188,7 @@ def train(args):
 
     ACNET2 = Net2()
     global_brain2 = Brain(ACNET2, args, acktr=True)
-    # global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2test_probs4_ice_0.15.bak'))
+    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2test_probs4_ice_0.15.bak'))
     global_brain2.actor_critic.eval()
 
     rollouts1 = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES)  # rollouts 객체

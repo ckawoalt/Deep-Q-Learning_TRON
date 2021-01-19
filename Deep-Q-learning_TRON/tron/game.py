@@ -65,7 +65,7 @@ class HistoryElement:
 
 
 class Game:
-    def __init__(self, width, height, pps,mode=None):
+    def __init__(self, width, height, pps,mode=None,slide_pram=None):
 
         self.width = width
         self.height = height
@@ -81,6 +81,7 @@ class Game:
         self.done = False
         self.mode=mode
         self.degree=random.randint(-15,15)
+        self.slide= slide if slide_pram is None else slide_pram
 
         for pp in self.pps:
             self.history[-1].map[pp.position[0], pp.position[1]] = pp.head()
@@ -90,8 +91,9 @@ class Game:
 
     def get_rate(self):
 
-        return ((self.degree-30)/100) ** 2
+        # return ((self.degree-30)/100) ** 2
 
+        return -((self.degree-30)*0.6)/100
     def get_degree(self):
 
         return self.degree
@@ -220,7 +222,7 @@ class Game:
                     if pp.position[0] >= 0 and pp.position[1] >= 0 and \
                             pp.position[0] < self.width and pp.position[1] < self.height and map_clone[pp.position[0], pp.position[1]] is Tile.EMPTY:
 
-                        rate = slide if self.mode =="ice" else self.get_rate()
+                        rate = self.slide if self.mode =="ice" else self.get_rate()
 
                         if random.random() <= rate:
 
@@ -240,7 +242,7 @@ class Game:
                 if self.mode=="ice" or self.mode =="temper":
                     if pp.position[0] >= 0 and pp.position[1] >= 0 and \
                             pp.position[0] < self.width and pp.position[1] < self.height and map_clone[pp.position[0], pp.position[1]] is Tile.EMPTY:
-                        rate = slide if self.mode == "ice" else self.get_rate()
+                        rate = self.slide if self.mode == "ice" else self.get_rate()
 
                         if random.random() <= rate:
 
@@ -258,7 +260,7 @@ class Game:
         self.history[-1].player_one_direction = self.pps[0].player.direction
         self.history[-1].player_two_direction = self.pps[1].player.direction
 
-        self.change_degree()
+        # self.change_degree()
 
         for (id, pp) in enumerate(self.pps):
             if pp.position[0] < 0 or pp.position[1] < 0 or \

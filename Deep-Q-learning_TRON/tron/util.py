@@ -43,7 +43,7 @@ def prob_map(x):
         for j in range(MAP_WIDTH+2):
                temp[i][j]=x
     return temp
-def make_game(p1,p2,mode=None,gamemode=None):
+def make_game(p1,p2,mode=None,gamemode=None,slide_pram=None):
 
     if mode == "fair":
         point_y=random.randint(0, MAP_HEIGHT - 1)
@@ -80,7 +80,7 @@ def make_game(p1,p2,mode=None,gamemode=None):
 
     game = Game(MAP_WIDTH, MAP_HEIGHT, [
         PositionPlayer(1,  ACPlayer() if p1 else MinimaxPlayer(2, "voronoi"), [x1, y1]),
-        PositionPlayer(2,  ACPlayer() if p2 else MinimaxPlayer(2, "voronoi"), [x2, y2])],gamemode)
+        PositionPlayer(2,  ACPlayer() if p2 else MinimaxPlayer(2, "voronoi"), [x2, y2])],gamemode,slide_pram)
     return game
 
 
