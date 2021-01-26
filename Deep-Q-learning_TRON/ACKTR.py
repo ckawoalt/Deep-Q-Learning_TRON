@@ -82,10 +82,10 @@ class Brain(object):
         '''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
         num_steps = NUM_ADVANCED_STEP
         num_processes = NUM_PROCESSES
-
+        self.optimizer.zero_grad()
         values, action_log_probs, entropy = self.actor_critic.evaluate_actions(
             rollouts.observations[:-1].view(-1, 3, MAP_WIDTH+2, MAP_HEIGHT+2).to(device).detach(),
-            rollouts.actions.view(-1, 1).to(device).detach(),rollouts.probs.view(-1).detach())
+            rollouts.actions.view(-1, 1).to(device).detach(),rollouts.probs.view(-1).to(device).detach())
 
         # 주의 : 각 변수의 크기
 
@@ -127,8 +127,6 @@ class Brain(object):
             self.optimizer.acc_stats = True
             fisher_loss.backward(retain_graph=True)
             self.optimizer.acc_stats = False
-
-        self.optimizer.zero_grad()
 
         # 오차함수의 총합
         total_loss = (value_loss * value_loss_coef -
@@ -182,13 +180,13 @@ def train(args):
     elif args.m == "3":
         actor_critic = Net3()
     else:
-        actor_critic = Net3()
+        actor_critic = Net()
 
     global_brain = Brain(actor_critic,args, acktr=True)
 
     ACNET2 = Net2()
     global_brain2 = Brain(ACNET2, args, acktr=True)
-    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2test_probs4_ice_0.15.bak'))
+    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2make_dyna_model.bak'))
     global_brain2.actor_critic.eval()
 
     rollouts1 = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES)  # rollouts 객체
@@ -255,8 +253,8 @@ def train(args):
             probs = torch.tensor(probs)
 
             with torch.no_grad():
-                action1 = actor_critic.act(rollouts1.observations[step],probs)
-                action2 = actor_critic.act(rollouts2.observations[step],probs)
+                action1 = actor_critic.act(rollouts1.observations[step],probs.to(device))
+                action2 = actor_critic.act(rollouts2.observations[step],probs.to(device))
 
             # (32,1)→(32,) -> tensor를 NumPy변수로
 
@@ -385,6 +383,7 @@ def train(args):
             writer.add_scalar('Action log probability', prob1_loss_sum1, losscount)
             writer.add_scalar('Advantage', advan_loss_sum1, losscount)
 
+            global_brain.actor_critic.eval()
             if losscount%200 == 0:
                 for i in range(PLAY_WITH_MINIMAX):
                     game = make_game(True, True,mode="fair",gamemode=GAME_MODE)
@@ -398,7 +397,7 @@ def train(args):
                         game_draw += 1
 
                 writer.add_scalar('minimax rating', p1_win/(PLAY_WITH_MINIMAX - game_draw), losscount)
-
+            global_brain.actor_critic.train()
             p1_win = 0
             game_draw = 0
             act_loss_sum1 = 0
@@ -415,12 +414,12 @@ def train(args):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-m', required=False, help='model structure number')
-    parser.add_argument('-r', required=False, help='reward condition number')
+    parser.add_argument('-m', required=False, help='model structure number',default="3")
+    parser.add_argument('-r', required=False, help='reward condition number',default="3")
 
-    parser.add_argument('-p', required=False, help='policy coefficient')
-    parser.add_argument('-v', required=False, help='value coefficient')
-    parser.add_argument('-u', required=False, help='unique string')
+    parser.add_argument('-p', required=False, help='policy coefficient',default="0.7")
+    parser.add_argument('-v', required=False, help='value coefficient',default="0.9")
+    parser.add_argument('-u', required=False, help='unique string',default='mul_test_better')
 
     args = parser.parse_args()
 

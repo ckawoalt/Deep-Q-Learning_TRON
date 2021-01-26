@@ -5,7 +5,28 @@
       <paths name="sol@210.115.46.58:22">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/sol/python/pycharm/Deep-Q-Learning_TRON" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home/sol/python/pycharm/Deep-Q-Learning_TRON" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="sol@210.115.46.58:22 (1)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_497" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="sol@210.115.46.58:22 (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/sol/python/pycharm/RLCaching" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="sol@210.115.46.58:22 (project level)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/sol/python/pycharm/Deep-Q-Learning_TRON" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

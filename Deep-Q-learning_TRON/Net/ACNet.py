@@ -3,7 +3,6 @@ import torch.nn.functional as F
 from config import *
 import torchvision.models as models
 
-
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
@@ -64,6 +63,7 @@ class Net(nn.Module):
 
         actor_output = self.actor2(self.activation(self.actor1(x)))
 
+
         critic_output = self.critic2(self.activation(self.critic1(x)))
         critic_output = self.critic3(self.activation(critic_output))
 
@@ -77,7 +77,14 @@ class Net(nn.Module):
         # actor_output=torch.clamp_min_(actor_output,min=0)
         # dim=1이므로 행동의 종류에 대해 softmax를 적용
         action_probs = F.softmax(actor_output, dim=1)
+        # print(action_probs,"prob")
+        # print(F.log_softmax(actor_output),",log prob")
+
+        #print(action_probs)
         action = action_probs.multinomial(num_samples=1)  # dim=1이므로 행동의 종류에 대해 확률을 계산
+
+        # print(F.log_softmax(actor_output).gather(1,action),",select")
+
         return action
 
     def deterministic_act(self, x,env_prob):
@@ -180,6 +187,7 @@ class Net3(Net):
     def __init__(self):
         super(Net, self).__init__()
 
+
         self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
 
         self.conv2 = nn.Conv2d(32, 32, 3, padding=1)
@@ -194,29 +202,27 @@ class Net3(Net):
 
         self.conv7 = nn.Conv2d(64, 64, 7, padding=3, stride=2)
 
-        # self.bi = nn.Bilinear(in1_features=1, in2_features=64, out_features=64,bias=False)
-        # self.probLayer=nn.Linear(64,64)
-
-
         self.fc1 = nn.Linear(64 * 3 * 3, 256)
-        self.fc2 = nn.Linear(256, 64)
-        self.fc3 = nn.Linear(64, 32)
+        self.fc2 = nn.Linear(256, 128)
 
-        self.actor1 = nn.Linear(33, 16)
-        self.actor2 = nn.Linear(16, 4)
+        self.fc_env = nn.Linear(1,64)
+        self.fc_env2 = nn.Linear(64, 128)
 
-        self.critic1 = nn.Linear(33, 16)
-        self.critic2 = nn.Linear(16, 8)
+
+        self.actor1 = nn.Linear(128, 32)
+        self.actor2 = nn.Linear(32, 4)
+
+        self.critic1 = nn.Linear(128, 32)
+        self.critic2 = nn.Linear(32, 8)
         self.critic3 = nn.Linear(8, 1)
 
-        self.dropout = nn.Dropout(p=0.3)
+        self.dropout = nn.Dropout(p=0)
         self.activation = self.mish
-
     def forward(self, x, env_prob):
         '''신경망 순전파 계산을 정의'''
         x = x.to(device)
 
-        env_prob = env_prob.unsqueeze(1).detach().cuda()
+        env_prob = env_prob.unsqueeze(1).cuda()
 
         x = self.activation(self.conv1(x))
 
@@ -239,19 +245,21 @@ class Net3(Net):
         x = x.view(-1, 64 * 3 * 3)
 
 
+        #print(x)
         x = self.dropout(self.activation(self.fc1(x)))
+        #print(x)
         x = self.dropout(self.activation(self.fc2(x)))
-        x = self.dropout(self.activation(self.fc3(x)))
-        # x = self.dropout(self.activation(self.bi(x,torch.cat([env_prob,env_prob],1))))
-        # x=self.activation(self.probLayer(x))
-        # x = self.dropout(self.activation(self.bi(env_prob,x)))
-        x=torch.cat([x,env_prob],1)
+        #print(x)
+        # x=torch.cat([x,env_prob],1)
+        env_prob = torch.tanh(self.fc_env(env_prob))
+        env_prob = torch.tanh(self.fc_env2(env_prob))
+        # print(env_prob)
+        x = x.mul(env_prob)
+
 
         actor_output = self.actor2(self.activation(self.actor1(x)))
-
+        #print(actor_output)
         critic_output = self.critic2(self.activation(self.critic1(x)))
         critic_output = self.critic3(self.activation(critic_output))
-
-
 
         return critic_output, actor_output

@@ -80,7 +80,7 @@ class Game:
         # self.reward = 0
         self.done = False
         self.mode=mode
-        self.degree=random.randint(-15,15)
+        self.degree=random.randint(-30,30)
         self.slide= slide if slide_pram is None else slide_pram
 
         for pp in self.pps:
@@ -364,8 +364,8 @@ class Game:
             # else:
 
             with torch.no_grad():
-                action1 = model.act(torch.tensor(pop(map.state_for_player(1))).unsqueeze(0).float(),torch.tensor([self.get_rate()]))
-                action2 = model2.act(torch.tensor(pop(map.state_for_player(2))).unsqueeze(0).float(),torch.tensor([self.get_rate()]))
+                action1 = model.act(torch.tensor(pop(map.state_for_player(1))).unsqueeze(0).float(),torch.tensor([self.get_rate()]).to(device))
+                action2 = model2.act(torch.tensor(pop(map.state_for_player(2))).unsqueeze(0).float(),torch.tensor([self.get_rate()]).to(device))
 
                 # action1 = model.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(1)),np.expand_dims(np.array(self.prob_map()),axis=0)),axis=0), axis=0)).float())
                 # action2 = model2.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(2)), np.expand_dims(np.array(self.prob_map()),axis=0)), axis=0),axis=0)).float())

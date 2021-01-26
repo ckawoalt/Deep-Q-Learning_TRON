@@ -46,17 +46,17 @@ def print_game_results(game):
 
 def main(args):
     pygame.init()
-    rating=False
+    rating=True
 
-    iter=1000
-    actor_critic = Net2()  # 신경망 객체 생성
+    iter=10000
+    actor_critic = Net3()  # 신경망 객체 생성
     global_brain = Brain(actor_critic,args, acktr=True)
-    global_brain.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2dinamic_mode_ice_vs_0.15_using_prob.bak'))
+    global_brain.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3test_mish2.bak'))
     global_brain.actor_critic.eval()
 
     actor_critic2 =  Net2()  # 신경망 객체 생성
     global_brain2 = Brain(actor_critic2,args, acktr=True)
-    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2dinamic_mode_ice_vs_0.15_using_prob.bak'))
+    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2make_dyna_model.bak'))
     global_brain2.actor_critic.eval()
 
     # DQN=DQNNET()
@@ -64,16 +64,17 @@ def main(args):
     # DQN.eval()
 
     if rating:
-        slide_pram=0.3
 
-        for i in range(1):
+        slide_pram=0.0
+
+        for i in range(11):
 
             nullgame = 0
             p1_win = 0
             p2_win = 0
 
             for i in range(iter):
-                game = make_game(True, True,mode="fair",gamemode="temper",slide_pram=slide_pram)
+                game = make_game(True, True,mode="fair",gamemode="ice",slide_pram=slide_pram)
                 pygame.mouse.set_visible(False)
                 window = None
 
@@ -86,7 +87,7 @@ def main(args):
                 else:
                     p2_win+=1
 
-            print("Player 1:{} \n Player 2:{}\np1's win rating {}\nprob={}".format(p1_win, p2_win, (p1_win / (p1_win + p2_win)), slide_pram))
+            print("Player 1:{} \nPlayer 2:{}\np1's win rating {}\nprob={}".format(p1_win, p2_win, (p1_win / (p1_win + p2_win)), slide_pram))
 
             slide_pram+=0.03
     else:
