@@ -96,7 +96,11 @@ class Game:
         return -((self.degree-30)*0.6)/100
     def get_degree(self):
 
-        return self.degree
+        return float(self.degree)
+
+    def get_degree_silde(self):
+
+        return float((-self.slide*100)*(10/6)+30)
 
     def change_degree(self):
 
@@ -114,96 +118,9 @@ class Game:
 
         for i in range(MAP_HEIGHT + 2):
             for j in range(MAP_WIDTH + 2):
-                temp[i][j] = self.degree
+                temp[i][j] = self.get_rate()
         return temp
 
-    """ 
-    
-    check independent condition
-    
-    def check_separated(self, map_clone, p1):
-        path_queue = SetQueue()
-        dist_map = np.copy(map_clone.state_for_player(1))
-        path_queue._put((p1.position[0] + 1, p1.position[1] + 1))
-
-        while not path_queue.empty():
-            queue_elem = path_queue._get()
-            x = queue_elem[0]
-            y = queue_elem[1]
-
-            dist_map[x, y] = 5
-
-            if dist_map[x, y - 1] == 1:
-                path_queue._put((x, y - 1))
-            elif dist_map[x, y - 1] == -10:
-                return False
-            if dist_map[x + 1, y] == 1:
-                path_queue._put((x + 1, y))
-            elif dist_map[x + 1, y] == -10:
-                return False
-            if dist_map[x, y + 1] == 1:
-                path_queue._put((x, y + 1))
-            elif dist_map[x, y + 1] == -10:
-                return False
-            if dist_map[x - 1, y] == 1:
-                path_queue._put((x - 1, y))
-            elif dist_map[x - 1, y] == -10:
-                return False
-
-        return True
-
-    check player's logest path 
-
-    def get_longest_path(self, map_clone, p1, p2):
-        p1_length = self.get_length(np.copy(map_clone.state_for_player(1)), p1.position[0] + 1, p1.position[1] + 1, 0, None)
-        p2_length = self.get_length(np.copy(map_clone.state_for_player(2)), p2.position[0] + 1, p2.position[1] + 1, 0, None)
-
-        # if p2_length == -10 or p1_length < p2_length:
-        if p1_length < p2_length:
-            self.loser_len=p1_length
-            self.winner_len=p2_length
-            return 2
-
-        elif p1_length > p2_length:
-
-            self.loser_len=p2_length
-            self.winner_len=p1_length
-
-            return 1
-        else:
-            return 0
-
- get able longest path
-
-    def get_length(self, map_clone, x, y, length, prev_length):
-
-        map_clone[x, y] = 5
-        l1, l2, l3, l4 = -1, -1, -1, -1
-        if map_clone[x, y - 1] == 1:
-            l1 = self.get_length(map_clone, x, y - 1, length + 1, prev_length)
-            if l1 == -10:
-                return -10
-        if map_clone[x + 1, y] == 1:
-            l2 = self.get_length(map_clone, x + 1, y, length + 1, prev_length)
-            if l2 == -10:
-                return -10
-        if map_clone[x, y + 1] == 1:
-            l3 = self.get_length(map_clone, x, y + 1, length + 1, prev_length)
-            if l3 == -10:
-                return -10
-        if map_clone[x - 1, y] == 1:
-            l4 = self.get_length(map_clone, x - 1, y, length + 1, prev_length)
-            if l4 == -10:
-                return -10
-
-        if prev_length is not None and max(l1, l2, l3, l4) > prev_length:
-            return -10
-
-        if l1 == -1 and l2 == -1 and l3 == -1 and l4 == -1:
-            return length
-
-        return max(l1, l2, l3, l4)
-"""
     def next_frame(self, action_p1, action_p2, window=None):
 
         map_clone = self.map()
@@ -247,10 +164,8 @@ class Game:
                         if random.random() <= rate:
 
                             if (id == 0):
-                                self.history.append(HistoryElement(map_clone, None, self.pps[1].player.direction))
                                 self.history[-1].player_one_direction = self.pps[0].player.direction
                             else:
-                                self.history.append(HistoryElement(map_clone,self.pps[0].player.direction, None))
                                 self.history[-1].player_two_direction = self.pps[1].player.direction
 
                             # print("미끌")
@@ -364,7 +279,7 @@ class Game:
             # else:
 
             with torch.no_grad():
-                action1 = model.act(torch.tensor(pop(map.state_for_player(1))).unsqueeze(0).float(),torch.tensor([self.get_rate()]).to(device))
+                action1 = model.act(torch.tensor(pop(map.state_for_player(1))).unsqueeze(0).float(),torch.tensor([self.get_degree()]).to(device))
                 action2 = model2.act(torch.tensor(pop(map.state_for_player(2))).unsqueeze(0).float(),torch.tensor([self.get_rate()]).to(device))
 
                 # action1 = model.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(1)),np.expand_dims(np.array(self.prob_map()),axis=0)),axis=0), axis=0)).float())

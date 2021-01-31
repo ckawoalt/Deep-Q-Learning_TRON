@@ -184,7 +184,7 @@ def train(args):
 
     global_brain = Brain(actor_critic,args, acktr=True)
 
-    ACNET2 = Net2()
+    ACNET2 = Net4()
     global_brain2 = Brain(ACNET2, args, acktr=True)
     global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2make_dyna_model.bak'))
     global_brain2.actor_critic.eval()
@@ -249,7 +249,7 @@ def train(args):
         # advanced 학습 대상이 되는 각 단계에 대해 계산
         for step in range(NUM_ADVANCED_STEP):
             # 행동을 선택
-            probs=[envs[i].get_rate() for i in range(NUM_PROCESSES)]
+            probs=[envs[i].get_degree() for i in range(NUM_PROCESSES)]
             probs = torch.tensor(probs)
 
             with torch.no_grad():
@@ -414,12 +414,12 @@ def train(args):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-m', required=False, help='model structure number',default="3")
+    parser.add_argument('-m', required=False, help='model structure number',default="2")
     parser.add_argument('-r', required=False, help='reward condition number',default="3")
 
     parser.add_argument('-p', required=False, help='policy coefficient',default="0.7")
     parser.add_argument('-v', required=False, help='value coefficient',default="0.9")
-    parser.add_argument('-u', required=False, help='unique string',default='mul_test_better')
+    parser.add_argument('-u', required=False, help='unique string',default='concat_get_prob')
 
     args = parser.parse_args()
 

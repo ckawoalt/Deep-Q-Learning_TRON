@@ -48,15 +48,16 @@ def main(args):
     pygame.init()
     rating=True
 
-    iter=10000
+    iter=1000
     actor_critic = Net3()  # 신경망 객체 생성
     global_brain = Brain(actor_critic,args, acktr=True)
-    global_brain.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3test_mish2.bak'))
+    global_brain.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3test_get_degree.bak'))
     global_brain.actor_critic.eval()
 
-    actor_critic2 =  Net2()  # 신경망 객체 생성
+    actor_critic2 =  Net3()  # 신경망 객체 생성
     global_brain2 = Brain(actor_critic2,args, acktr=True)
-    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2make_dyna_model.bak'))
+    # global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2make_dyna_model.bak'))
+    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3mul_test_better_test3.bak'))
     global_brain2.actor_critic.eval()
 
     # DQN=DQNNET()
@@ -67,7 +68,7 @@ def main(args):
 
         slide_pram=0.0
 
-        for i in range(11):
+        for i in range(13):
 
             nullgame = 0
             p1_win = 0
