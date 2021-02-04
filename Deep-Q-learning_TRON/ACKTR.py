@@ -12,6 +12,8 @@ import argparse
 
 minimax = MinimaxPlayer(2, 'voronoi')
 folderName='save'
+Nettype=None
+maptype=type(MapNet())
 
 
 # DQN = DQNNET()
@@ -22,27 +24,32 @@ folderName='save'
 class RolloutStorage(object):
     '''Advantage 학습에 사용할 메모리 클래스'''
     def __init__(self, num_steps, num_processes):
+        if Nettype == maptype:
+            self.observations = torch.zeros(num_steps + 1, num_processes, 4, MAP_WIDTH + 2, MAP_HEIGHT + 2)
+        else:
+            self.observations = torch.zeros(num_steps + 1, num_processes, 3, MAP_WIDTH+2, MAP_HEIGHT+2)
 
-        # self.observations = torch.zeros(num_steps + 1, num_processes,3,12,12)
-        self.observations = torch.zeros(num_steps + 1, num_processes, 3, MAP_WIDTH+2, MAP_HEIGHT+2)
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
         self.actions = torch.zeros(num_steps, num_processes, 1).long()
-        self.probs=torch.zeros(num_steps,num_processes).float()
 
-
+        if Nettype is not maptype:
+            self.probs=torch.zeros(num_steps,num_processes,2).float()
         # 할인 총보상 저장
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
         self.index = 0  # insert할 인덱스
 
-    def insert(self, current_obs, action, reward, mask,probs):
+    def insert(self, current_obs, action, reward, mask,probs=None):
         '''현재 인덱스 위치에 transition을 저장'''
 
         self.observations[self.index + 1].copy_(current_obs)
         self.masks[self.index + 1].copy_(mask)
         self.rewards[self.index].copy_(reward)
         self.actions[self.index].copy_(action)
-        self.probs[self.index].copy_(probs)
+
+        if probs is not None:
+            self.probs[self.index].copy_(probs)
+
         self.index = (self.index + 1) % NUM_ADVANCED_STEP  # 인덱스 값 업데이트
 
     def after_update(self):
@@ -62,10 +69,10 @@ class RolloutStorage(object):
             self.returns[ad_step] = self.returns[ad_step + 1] * GAMMA * self.masks[ad_step + 1] + self.rewards[ad_step]
 
 # 에이전트의 두뇌 역할을 하는 클래스. 모든 에이전트가 공유한다
+
 class Brain(object):
     def __init__(self, actor_critic,args, acktr=False):
         self.actor_critic = actor_critic.to(device)  # actor_critic은 Net 클래스로 구현한 신경망
-        #self.optimizer = optim.RMSprop(self.actor_critic.parameters(), lr=lr, eps=eps, alpha=alpha)
 
         self.acktr = acktr
 
@@ -82,10 +89,18 @@ class Brain(object):
         '''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
         num_steps = NUM_ADVANCED_STEP
         num_processes = NUM_PROCESSES
+
         self.optimizer.zero_grad()
-        values, action_log_probs, entropy = self.actor_critic.evaluate_actions(
-            rollouts.observations[:-1].view(-1, 3, MAP_WIDTH+2, MAP_HEIGHT+2).to(device).detach(),
-            rollouts.actions.view(-1, 1).to(device).detach(),rollouts.probs.view(-1).to(device).detach())
+        if Nettype == maptype:
+
+            values, action_log_probs, entropy = self.actor_critic.evaluate_actions(
+                rollouts.observations[:-1].view(-1, 4, MAP_WIDTH+2, MAP_HEIGHT+2).to(device).detach(),
+                rollouts.actions.view(-1, 1).to(device).detach())
+
+        else:
+            values, action_log_probs, entropy = self.actor_critic.evaluate_actions(
+                rollouts.observations[:-1].view(-1, 3, MAP_WIDTH + 2, MAP_HEIGHT + 2).to(device).detach(),
+                rollouts.actions.view(-1, 1).to(device).detach(),rollouts.probs.view(-1,2).to(device).detach())
 
         # 주의 : 각 변수의 크기
 
@@ -94,9 +109,9 @@ class Brain(object):
         # # values torch.Size([80, 1])
         # action_log_probs torch.Size([80, 1])
         # entropy torch.Size([])
+        # probs
 
         values = values.view(num_steps, num_processes,1)  # torch.Size([160, 1]) ->([5, 32, 1])
-
         action_log_probs = action_log_probs.view(num_steps, num_processes, 1) # torch.Size([160, 1]) ->([5, 32, 1])
 
         # advantage(행동가치-상태가치) 계산
@@ -161,30 +176,29 @@ def train(args):
     ai_p1=True
     ai_p2=True
 
-    p= "1" if args.p is None else args.p
-    v = "1" if args.v is None else args.v
-    m = "1" if args.m is None else args.m
-    r = "1" if args.r is None else args.r
+
+
     unique= "" if args.u is None else args.u
 
     envs = [make_game(ai_p1,ai_p2,gamemode=GAME_MODE) for i in range(NUM_PROCESSES)]
 
-    eventid = datetime.now().strftime('runs/ACKTR-%Y%m-%d%H-%M%S-ent ') + str(entropy_coef) + '-pol ' + p + '-val ' + v + '-step' + str(
-        NUM_ADVANCED_STEP) + '-process ' + str(NUM_PROCESSES) + unique + '-model ' + m + '-reward ' + r
+    eventid = datetime.now().strftime('runs/ACKTR-%Y%m-%d%H-%M%S-ent ') + str(entropy_coef) + '-pol ' + args.p + '-val ' + args.v + '-step' + str(
+        NUM_ADVANCED_STEP) + '-process ' + str(NUM_PROCESSES) + unique + '-model ' + args.m + '-reward ' + args.r
 
     writer = SummaryWriter(eventid)
 
 
-    if args.m == "2":
-        actor_critic = Net2()  # 신경망 객체 생성
-    elif args.m == "3":
-        actor_critic = Net3()
-    else:
-        actor_critic = Net()
+    if args.m == "map":
+        actor_critic = MapNet()  # 신경망 객체 생성
+    elif args.m == "mul":
+        actor_critic = Mulnet()
+
+    global Nettype
+    Nettype=type(actor_critic)
 
     global_brain = Brain(actor_critic,args, acktr=True)
 
-    ACNET2 = Net4()
+    ACNET2 = TestNet()
     global_brain2 = Brain(ACNET2, args, acktr=True)
     global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2make_dyna_model.bak'))
     global_brain2.actor_critic.eval()
@@ -220,17 +234,16 @@ def train(args):
 
     current_obs2 = obs2  # 가장 최근의 obs를 저장
 
-    # degree_map = [envs[i].prob_map() for i in range(NUM_PROCESSES)]
-    # degree_map=torch.tensor(degree_map).unsqueeze(1)
+    if Nettype == maptype:
+        degree_map = [envs[i].prob_map() for i in range(NUM_PROCESSES)]
+        degree_map=torch.tensor(degree_map).unsqueeze(1)
 
-    # advanced 학습에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
+        rollouts1.observations[0].copy_(torch.cat((current_obs1,degree_map),1))
+        rollouts2.observations[0].copy_(torch.cat((current_obs2,degree_map),1))
+    else:
+        rollouts1.observations[0].copy_(current_obs1)
+        rollouts2.observations[0].copy_(current_obs2)
 
-    # rollouts1.observations[0].copy_(torch.cat([current_obs1,degree_map],dim=1))
-    # rollouts2.observations[0].copy_(torch.cat([current_obs2,degree_map],dim=1))
-
-
-    rollouts1.observations[0].copy_(current_obs1)
-    rollouts2.observations[0].copy_(current_obs2)
     gamecount = 0
     losscount = 0
     duration = 0
@@ -249,14 +262,21 @@ def train(args):
         # advanced 학습 대상이 되는 각 단계에 대해 계산
         for step in range(NUM_ADVANCED_STEP):
             # 행동을 선택
-            probs=[envs[i].get_degree() for i in range(NUM_PROCESSES)]
-            probs = torch.tensor(probs)
+            if Nettype is not maptype:
+                probs1 = [envs[i].get_multy(0) for i in range(NUM_PROCESSES)]
+                probs1 = torch.tensor(probs1)
+
+                probs2 = [envs[i].get_multy(1) for i in range(NUM_PROCESSES)]
+                probs2 = torch.tensor(probs2)
 
             with torch.no_grad():
-                action1 = actor_critic.act(rollouts1.observations[step],probs.to(device))
-                action2 = actor_critic.act(rollouts2.observations[step],probs.to(device))
+                if Nettype== maptype:
+                    action1 = actor_critic.act(rollouts1.observations[step])
+                    action2 = actor_critic.act(rollouts2.observations[step])
 
-            # (32,1)→(32,) -> tensor를 NumPy변수로
+                else:
+                    action1 = actor_critic.act(rollouts1.observations[step],probs1.to(device))
+                    action2 = actor_critic.act(rollouts2.observations[step],probs2.to(device))
 
             actions1 = action1.squeeze(1).to('cpu').numpy()
             actions2 = action2.squeeze(1).to('cpu').numpy()
@@ -309,39 +329,41 @@ def train(args):
             # current_obs를 업데이트
             obs1 = [pop_up(obs_np1[i]) for i in range(NUM_PROCESSES)]
             obs2 = [pop_up(obs_np2[i]) for i in range(NUM_PROCESSES)]
-            # obs1 = [obs_np1[i] for i in range(NUM_PROCESSES)]
-            # obs2 = [obs_np2[i] for i in range(NUM_PROCESSES)]
-
-            # obs1 = torch.from_numpy(pop_up(obs_np1)).float()
-            # obs2 = torch.from_numpy(pop_up(obs_np2)).float()
 
             obs1 = torch.tensor(np.array(obs1))
             obs2 = torch.tensor(np.array(obs2))
+            if Nettype == maptype:
+                degree_map = [envs[i].prob_map() for i in range(NUM_PROCESSES)]
+                degree_map = torch.tensor(degree_map).unsqueeze(1)
 
+                obs1=torch.cat([obs1, degree_map], dim=1)
+                obs2=torch.cat([obs2, degree_map], dim=1)
 
-            # degree_map = [envs[i].prob_map() for i in range(NUM_PROCESSES)]
-            # degree_map = torch.tensor(degree_map).unsqueeze(1)
+                current_obs1 = obs1  # 최신 상태의 obs를 저장
+                current_obs2 = obs2  # 최신 상태의 obs를 저장
 
-            # advanced 학습에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
+                # 메모리 객체에 현 단계의 transition을 저장
+                rollouts1.insert(current_obs1, action1.data, reward1, masks)
+                rollouts2.insert(current_obs2, action2.data, reward2, masks)
+            else:
+                current_obs1 = obs1
+                current_obs2 = obs2
 
-            # obs1=torch.cat([obs1, degree_map], dim=1)
-            # obs2=torch.cat([obs2, degree_map], dim=1)
-
-            current_obs1 = obs1  # 최신 상태의 obs를 저장
-            current_obs2 = obs2  # 최신 상태의 obs를 저장
-
-            # 메모리 객체에 현 단계의 transition을 저장
-            rollouts1.insert(current_obs1, action1.data, reward1, masks,probs)
-            rollouts2.insert(current_obs2, action2.data, reward2, masks,probs)
-
+                rollouts1.insert(current_obs1, action1.data, reward1, masks,probs1)
+                rollouts2.insert(current_obs2, action2.data, reward2, masks,probs2)
 
         # advanced 학습 for문 끝
-
         # advanced 학습 대상 중 마지막 단계의 상태로 예측하는 상태가치를 계산
 
         with torch.no_grad():
-            next_value1 = actor_critic.get_value(rollouts1.observations[-1],probs)
-            next_value2 = actor_critic.get_value(rollouts2.observations[-1],probs)
+            if Nettype == maptype:
+
+                next_value1 = actor_critic.get_value(rollouts1.observations[-1])
+                next_value2 = actor_critic.get_value(rollouts2.observations[-1])
+            else:
+                next_value1 = actor_critic.get_value(rollouts1.observations[-1],probs1)
+                next_value2 = actor_critic.get_value(rollouts2.observations[-1],probs2)
+
             # rollouts.observations의 크기는 torch.Size([6, 32, 4])
 
         # 모든 단계의 할인총보상을 계산하고, rollouts의 변수 returns를 업데이트
@@ -374,7 +396,7 @@ def train(args):
                 min_loss = act_loss_sum1
 
 
-            torch.save(global_brain.actor_critic.state_dict(), 'save/' + 'ACKTR_player'+m + unique +'.bak')
+            torch.save(global_brain.actor_critic.state_dict(), 'save/' + 'ACKTR_player'+args.m + unique +'.bak')
 
             writer.add_scalar('Training loss', total_loss_sum1, losscount)
             writer.add_scalar('Value loss', val_loss_sum1, losscount)
@@ -398,6 +420,7 @@ def train(args):
 
                 writer.add_scalar('minimax rating', p1_win/(PLAY_WITH_MINIMAX - game_draw), losscount)
             global_brain.actor_critic.train()
+
             p1_win = 0
             game_draw = 0
             act_loss_sum1 = 0
@@ -412,17 +435,17 @@ def train(args):
 
 
 def main():
+
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-m', required=False, help='model structure number',default="2")
+    parser.add_argument('-m', required=False, help='model structure number',default="mul")
     parser.add_argument('-r', required=False, help='reward condition number',default="3")
 
     parser.add_argument('-p', required=False, help='policy coefficient',default="0.7")
     parser.add_argument('-v', required=False, help='value coefficient',default="0.9")
-    parser.add_argument('-u', required=False, help='unique string',default='concat_get_prob')
+    parser.add_argument('-u', required=False, help='unique string',default='multi_test')
 
     args = parser.parse_args()
-
     train(args)
 
 

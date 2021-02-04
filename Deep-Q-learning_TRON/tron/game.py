@@ -10,8 +10,11 @@ import random
 import numpy as np
 import queue
 from config import *
+from Net.ACNet import MapNet
 
 
+
+maptype=type(MapNet())
 class SetQueue(queue.Queue):
     def _init(self, maxsize):
         self.queue = OrderedSet()
@@ -77,6 +80,7 @@ class Game:
         # self.winner_len = 0
         self.next_p1 = []
         self.next_p2 = []
+        self.weight=[random.randint(40,101),random.randint(40,101)]
         # self.reward = 0
         self.done = False
         self.mode=mode
@@ -89,12 +93,17 @@ class Game:
     def map(self):
         return self.history[-1].map.clone()
 
-    def get_rate(self):
+    def get_rate(self,player_num=None):
 
         # return ((self.degree-30)/100) ** 2
+        if player_num is None:
+            return -((self.degree-30)*0.6)/100
+        else:
+            return (-((self.degree - 30) * 0.6) / 100)-((70-self.get_weight(player_num))/100)
 
-        return -((self.degree-30)*0.6)/100
+
     def get_degree(self):
+
 
         return float(self.degree)
 
@@ -118,7 +127,23 @@ class Game:
 
         for i in range(MAP_HEIGHT + 2):
             for j in range(MAP_WIDTH + 2):
-                temp[i][j] = self.get_rate()
+                temp[i][j] = self.get_degree_silde()
+        # print(temp)
+        return temp
+    def get_weight(self,player_num):
+
+        return self.weight[player_num]
+
+    def get_multy(self,player_num):
+
+        return [self.get_degree(),self.get_weight(player_num)]
+    def degree_map(self):
+
+        temp = np.zeros((MAP_WIDTH + 2, MAP_HEIGHT + 2))
+
+        for i in range(MAP_HEIGHT + 2):
+            for j in range(MAP_WIDTH + 2):
+                temp[i][j] = self.get_degree()
         return temp
 
     def next_frame(self, action_p1, action_p2, window=None):
@@ -139,7 +164,7 @@ class Game:
                     if pp.position[0] >= 0 and pp.position[1] >= 0 and \
                             pp.position[0] < self.width and pp.position[1] < self.height and map_clone[pp.position[0], pp.position[1]] is Tile.EMPTY:
 
-                        rate = self.slide if self.mode =="ice" else self.get_rate()
+                        rate = self.slide if self.mode =="ice" else self.get_rate(id)
 
                         if random.random() <= rate:
 
@@ -159,7 +184,7 @@ class Game:
                 if self.mode=="ice" or self.mode =="temper":
                     if pp.position[0] >= 0 and pp.position[1] >= 0 and \
                             pp.position[0] < self.width and pp.position[1] < self.height and map_clone[pp.position[0], pp.position[1]] is Tile.EMPTY:
-                        rate = self.slide if self.mode == "ice" else self.get_rate()
+                        rate = self.slide if self.mode == "ice" else self.get_rate(id)
 
                         if random.random() <= rate:
 
@@ -267,20 +292,18 @@ class Game:
                 sleep(0.3)
 
             map=self.map()
-
-            #
-            # if(pop == None):
-            #     with torch.no_grad():
-            #         action1 = model.act(torch.tensor(np.reshape(map.state_for_player(1), (1, 1, map.state_for_player(1).shape[0],
-            #                                                                               map.state_for_player(1).shape[1]))).float(),self.get_rate())
-            #         action2 = model2.act(torch.tensor(np.reshape(map.state_for_player(2), (1, 1, map.state_for_player(2).shape[0],
-            #                                                                               map.state_for_player(2).shape[1]))).float(),self.get_rate())
-            #
-            # else:
-
             with torch.no_grad():
-                action1 = model.act(torch.tensor(pop(map.state_for_player(1))).unsqueeze(0).float(),torch.tensor([self.get_degree()]).to(device))
-                action2 = model2.act(torch.tensor(pop(map.state_for_player(2))).unsqueeze(0).float(),torch.tensor([self.get_rate()]).to(device))
+                if type(model) ==maptype:
+                    action1 = model.act(torch.cat([torch.tensor(pop(map.state_for_player(1))),torch.tensor(self.prob_map()).unsqueeze(0)],0).unsqueeze(0).float())
+                else:
+                    action1 = model.act(torch.tensor(pop(map.state_for_player(1))).unsqueeze(0).float(),torch.tensor([self.get_multy(0)]).to(device))
+
+                if type(model2) == maptype:
+                    action1 = model2.act(torch.cat([torch.tensor(pop(map.state_for_player(2))), torch.tensor(self.prob_map()).unsqueeze(0)],0).unsqueeze(0).float())
+                else:
+                    action2 = model2.act(torch.tensor(pop(map.state_for_player(2))).unsqueeze(0).float(),torch.tensor([self.get_rate()]).to(device))
+
+                # action2 = model2.act(torch.tensor(pop(map.state_for_player(2))).unsqueeze(0).float(),torch.tensor([self.slide]).to(device))
 
                 # action1 = model.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(1)),np.expand_dims(np.array(self.prob_map()),axis=0)),axis=0), axis=0)).float())
                 # action2 = model2.act(torch.tensor(np.expand_dims(np.concatenate((pop(map.state_for_player(2)), np.expand_dims(np.array(self.prob_map()),axis=0)), axis=0),axis=0)).float())

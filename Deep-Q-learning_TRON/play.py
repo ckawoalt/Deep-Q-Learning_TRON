@@ -1,6 +1,6 @@
 import pygame
 from tron.window import Window
-from Net.ACNet import Net,Net2,Net3
+from Net.ACNet import *
 from tron.util import *
 from ACKTR import Brain
 from Net.DQNNet import Net as DQNNET
@@ -9,6 +9,7 @@ import argparse
 import random
 
 folderName = 'save'
+
 
 
 def random_position(width, height):
@@ -48,17 +49,21 @@ def main(args):
     pygame.init()
     rating=True
 
-    iter=1000
-    actor_critic = Net3()  # 신경망 객체 생성
+    iter=10000
+    actor_critic = MapNet()  # 신경망 객체 생성
     global_brain = Brain(actor_critic,args, acktr=True)
-    global_brain.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3test_get_degree.bak'))
+    global_brain.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3map_get_degree.bak'))
     global_brain.actor_critic.eval()
 
-    actor_critic2 =  Net3()  # 신경망 객체 생성
-    global_brain2 = Brain(actor_critic2,args, acktr=True)
-    # global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2make_dyna_model.bak'))
-    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3mul_test_better_test3.bak'))
+    actor_critic2= TestNet()
+    global_brain2 = Brain(actor_critic2, args, acktr=True)
+    global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player2make_dyna_model.bak'))
     global_brain2.actor_critic.eval()
+
+    # actor_critic2 =  Net3()  # 신경망 객체 생성
+    # global_brain2 = Brain(actor_critic2,args, acktr=True)
+    # global_brain2.actor_critic.load_state_dict(torch.load(folderName + '/ACKTR_player3mul_test_better_test3.bak'))
+    # global_brain2.actor_critic.eval()
 
     # DQN=DQNNET()
     # DQN.load_state_dict(torch.load(folderName+'/DDQN.bak'))
