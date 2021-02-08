@@ -382,7 +382,7 @@ def train(args):
         prob1_loss_sum1 += prob1
         advan_loss_sum1 += advan1
 
-        if losscount%SHOW_ITER == 0:
+        if losscount%SHOW_ITER == 1:
             total_loss_sum1 = total_loss_sum1 / SHOW_ITER
             val_loss_sum1 = val_loss_sum1 / SHOW_ITER
             act_loss_sum1 = act_loss_sum1 / SHOW_ITER
